@@ -4,6 +4,8 @@
 
 ## Spring Boot 的环境安装
 
+### Ubuntu Linux
+
 在 `Linux` 环境下，推荐使用 `SDKMAN` 来安装 `Spring`、`Java` 以及 `Grails` 等依赖类库。安装 `SDKMAN` 非常简单，打开一个 `terminal` \(命令行终端窗口\)，然后输入以下命令：
 
 ```
