@@ -8,13 +8,13 @@
 
 在 `Linux` 环境下，推荐使用 `SDKMAN` 来安装 `Spring`、`Java` 以及 `Grails` 等依赖类库。安装 `SDKMAN` 非常简单，打开一个 `terminal` \(命令行终端窗口\)，然后输入以下命令，请一定注意需要科学上网才能确保安装成功：
 
-```
+```bash
 curl -s "https://get.sdkman.io" | bash
 ```
 
 注意在此过程中，安装脚本可能会提示你缺少某些依赖的软件包，这时我们需要按屏幕提示进行软件依赖的安装，比如下面的这个提示，说的是我们的系统没有安装 zip 和 unzip
 
-```
+```bash
 Looking for a previous installation of SDKMAN...
 Looking for unzip...
 Looking for zip...
@@ -28,13 +28,13 @@ Not found.
 
 那么我们需要使用下面命令进行安装
 
-```
+```bash
 apg-get install zip unzip
 ```
 
 安装好依赖后，请再次执行上面的 `SDKMAN` 安装脚本并按屏幕提示完成安装。如果你可以看到类似下面的输出，那么安装过程就结束了
 
-```
+```bash
 All done!
 
 
@@ -51,13 +51,13 @@ Enjoy!!!
 
 安装好之后，在 `terminal` 中再输入以下命令
 
-```
+```bash
 source "$HOME/.sdkman/bin/sdkman-init.sh"
 ```
 
 这样就安装好了，你可以通过以下命令来验证安装是否成功：
 
-```
+```bash
 sdk version
 ```
 
@@ -69,7 +69,7 @@ sdk version
 
 `macOS` 对于开发来讲是非常友好的，首先我们需要安装 `brew` ，这是 `macOS` 上的一个包管理工具，类似于 `Ubuntu` 中的 `apt-get` 。在 `terminal` 中键入下面的命令即可完成安装。
 
-```
+```bash
 /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
 ```
 
