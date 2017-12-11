@@ -4,7 +4,7 @@ Angular Material 是 Angular 团队官方开发的一套符合 Google Material �
 
 `@angular/material` 在 `2.0.0-beta.8` 之前是单独的一个 `package`，但后来团队把其中的一些公用功能以及组件抽离出来放到了一个单独的 `@angular/cdk` 包中。这个 `cdk` 以后可以作为你开发自己风格组件库的基础，因为它封装了很多公共特性的支持，你不需要从零开始。
 
-![](/assets/chap_2_2_001)
+![](/assets/chap_2_2_001.png)
 
 总体来说，`@angular/material` 提供了 30 多个组件以及主题和字体的支持，并通过 `@angular/flex-layout` 提供了 `flexbox` 布局的 angular 封装。
 
@@ -19,8 +19,6 @@ Angular Material 是 Angular 团队官方开发的一套符合 Google Material �
 * 主题支持：主题的支持主要由框架提供的一系列 `scss` 函数来实现，因此如果希望有主题的自定义时，需要以 `scss` 形式提供样式。
 
 
-
-# \#
 
 
 
