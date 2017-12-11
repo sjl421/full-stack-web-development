@@ -58,7 +58,7 @@ const person = new Person(
 
 #### Angular 中的依赖性注入框架
 
-Angular 中的依赖性注入框架主要包含下面几个角色： 
+Angular 中的依赖性注入框架主要包含下面几个角色：
 
 * Injector（注入者）：使用 Injector 提供的 API 创建依赖的实例
 * Provider（提供者）：Provider 告诉 Injector \*\*怎样\*\* 创建实例（比如我们上面提到的是通过某个构造函数还是工厂类创建等等）。Provider 接受一个令牌，然后把令牌映射到一个用于构建目标对象的工厂函数。
@@ -66,5 +66,113 @@ Angular 中的依赖性注入框架主要包含下面几个角色：
 
 ![](/assets/chap_2_1_001.png)'
 
+可能看到这里还是有些云里雾里，没关系，我们还是用例子来说明：
 
+```js
+import { ReflectiveInjector } from '@angular/core';
+const injector = RelfectiveInjector.resolveAndCreate([
+  // providers 数组定义了多个提供者，provide 属性定义令牌
+  // useXXX 定义怎样创建的方法
+  { provide: Person, useClass: Person },
+  { provide: Address, useFactory: () => {
+        if(env.testing)
+            return new Address('辽宁', '沈阳', '和平区', 'xx街xx号');
+        return new Address('北京', '北京', '朝阳区', 'xx街xx号');
+    } 
+  },
+  { provide: Id, useFactory: (type) => {
+        if(type === ID_TYPES.PASSPORT)
+            return Id.getInstance(ID_TYPES.PASSPORT, someparam);
+        if(type === ID_TYPES.IDCARD)
+            return Id.getInstance(ID_TYPES.IDCARD);
+        return Id.getDefaultInstance();
+    } 
+  }
+]);
+
+class Person {
+  // 通过 @Inject 修饰器告诉 DI 这个参数需要什么样类型的对象
+  // 请在 injector 中帮我找到并注入到对应参数中
+  constructor(@Inject(Address) address, @Inject(Id) id) {
+    // 省略
+  }
+}
+
+// 通过 injector 得到对象
+const person = injector.get(Person);
+```
+
+上述代码中，Angular 提供了 `RelfectiveInjector` 来解析和创建依赖的对象，你可以看到我们把这个应用中需要的 `Person` 、 `Id` 和 `Address` 都放在里面了。谁需要这些对象就可以向 `injector` 请求，比如： `injector.get(Person)` ，当然也可以 `injector.get(Address)` 等等。可以把它理解成一个依赖性的池子，想要什么就取就好了。
+
+但是问题来了，首先 `injector` 怎么知道如何创建你需要的对象呢？这个是靠 `Provider` 定义的，在刚刚的 `RelfectiveInjector.resolveAndCreate()` 中我们发现它是接受一个数组作为参数，这个数组就是一个 `Provider` 的数组。`Provider` 最常见的属性有两个。第一个是 `provide` ，这个属性其实定义的是令牌，令牌的作用是让框架知道你要找的依赖是哪个然后就可以在 `useXXX` 这个属性定义的构建方式中将你需要的对象构建出来了。
+
+那么 `constructor(@Inject(Address) address, @Inject(Id) id)` 这句怎么理解呢？由于我们在 `const person = injector.get(Person);` 想取得 Person ，但 Person 又需要两个依赖参数： `address` 和 `id` 。 `@Inject(Address) address` 是告诉框架我需要的是一个令牌为 `Address` 的对象，这样框架就又到 `injector` 中寻找令牌为 `Address` 对应的工厂函数，通过工厂函数构造好对象后又把对象赋值到 `address` 。
+
+由于这里我们是用对象的类型来做令牌，上面的注入代码也可以写成下面的样子。利用 `Typescript` 的类型定义，框架看到有依赖的参数就会去 `Injector` 中寻找令牌为该类型的工厂函数。
+
+```js
+class Person {
+  constructor(address: Address, id: Id) {
+    // 省略
+  }
+}
+```
+
+而对于令牌为类型的并且是 `useClass` 的这种形式，由于前后都一样，对于这种 Provider 我们有一个语法糖：可以直接写成 `{ Person }` ，而不用完整的写成 `{ provide: Person, useClass: Person }` 这种形式。当然还要注意 `Token` 不一定非得是某个类的类型，也可以是字符串， Angular 中还有 `InjectionToken` 用于创建一个可以避免重名的 Token。
+
+那么其实除了 `useClass` 和 `useFactory` ，我们还可以使用 `useValue` 来提供一些简单数据结构，比如我们可能希望把系统的 API 基础信息配置通过这种形式让所有想调用 API 的类都可以注入。如下面的例子中，基础配置就是一个简单的对象，里面有多个属性，这种情况用 `useValue` 即可。
+
+```js
+{
+  provide: 'BASE_CONFIG',
+  useValue: {
+    uri: 'https://dev.local/1.1',
+    apiSecret: 'blablabla',
+    apiKey: 'nahnahnah'
+  }
+}
+```
+
+#### 依赖性注入进阶
+
+可能你注意到，上面提到的依赖性注入有一个特点，那就是需要注入的参数如果在 `Injector` 中找不到对应的依赖，那么就会发生异常了。但确实有些时候我们是需要这样的特性：该依赖是可选的，如果有我们就这么做，如果没有就那样做。遇到这种情况怎么办呢？
+
+Angular 提供了一个非常贴心的 `@Optional` 修饰器，这个修饰器用来告诉框架后面的参数需要一个可选的依赖。
+
+```js
+constructor(@Optional(ThirdPartyLibrary) lib) {
+    if (!lib) {
+    // 如果该依赖不存在的情况
+    }
+}
+```
+
+需要注意的是，Angular 的 DI 框架创建的对象都是单件（ Singleton ）的，那么如果我们需要每次都创建一个新对象怎么破呢？我们有两个选择，第一种：在 Provider 中返回工厂而不是对象，像下面例子这样：
+
+```js
+  { 
+    provide: Address, 
+    useFactory: () => {
+        // 注意：这里返回的是工厂，而不是对象
+        return () => {
+            if(env.testing)
+                return new Address('辽宁', '沈阳', '和平区', 'xx街xx号');
+            return new Address('北京', '北京', '朝阳区', 'xx街xx号');
+        }
+    } 
+  }
+```
+
+第二种：我们创建一个 `child injector` （子注入者）： `Injector.resolveAndCreateChild()`
+
+```js
+const injector = ReflectiveInjector.resolveAndCreate([Person]);
+const childInjector = injector.resolveAndCreateChild([Person]);
+// 此时父 Injector 和子 Injector 得到的 Person 对象是不同的
+injector.get(Person) !== childInjector.get(Person);
+```
+
+而且子 Injector 还有一个特性：如果在 `childInjector` 中找不到令牌对应的工厂，它会去父 `Injector` 中寻找。换句话说，这父子关系（多重的）是构成了一棵依赖树，框架会从最下面的子 `Injector` 开始寻找，一直找到最上面的父 `Injector`。看到这里相信你就知道为什么父组件声明的 `providers` 对于子组件是可见的，因为子组件中在自己 `constructor` 中如果发现有找不到的依赖就会到父组件中去找。
+
+在实际的 Angular 应用中我们其实很少会直接显式使用 `Injector` 去完成注入，而是在对应的模块、组件等的元数据中提供 `providers` 即可，这是由于 Angular 框架帮我们完成了这部分代码，它们其实在元数据配置后由框架放入 `Injector` 中了。
 
