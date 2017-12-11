@@ -22,3 +22,5 @@ Angular Material 是 Angular 团队官方开发的一套符合 Google Material �
 
 Google 的 Material 设计语言中，对于一个应用的布局经常采用的形式是一个内容区块加上一个侧面菜单，这个菜单既可以是滑出的也可以是固定在侧面的。
 
+![](/assets/chap_2_2_002.png)
+
