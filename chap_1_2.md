@@ -63,6 +63,8 @@ sdk version
 
 使用 `sdk` 这个命令就可以很方便安装依赖类库
 
+
+
 ### macOS
 
 `macOS` 对于开发来讲是非常友好的，首先我们需要安装 `brew` ，这是 `macOS` 上的一个包管理工具，类似于 `Ubuntu` 中的 `apt-get` 。在 `terminal` 中键入下面的命令即可完成安装。
@@ -76,6 +78,24 @@ sdk version
 ### Windows
 
 `Windows` 作为使用最普及的操作系统，很多开发者却是在 `Windows` 上过度的依赖图形化的 IDE，对于环境配置可能并不熟悉。其实在 `Windows` 搭建一个好用的环境也不是很难，但第一件事是要有一个顺手一些的 `terminal` ，不吹不黑，`Windows` 自带的 `cmd` 就不提了，`powershell` 比 `cmd` 好用一些，但也还是比 `*nix` 下的 `terminal` 差着一大截。所以这里强力推荐 `cmder` \( [http://cmder.net/](http://cmder.net/) \)，不但提供 `bash` 的体验到 `Windows`上面，而且集成了 `git`，对于开发者来说是必备神器啊。
+
+类似的，我们还需要一个类似 `brew` 这样的包管理工具，在 `Windows` 平台上，很多类似的这种工具，但其中大部分我感觉还是使用起来有些问题，这里推荐 Scoop \( [http://scoop.sh/](http://scoop.sh/) \)，由于在设计上参考了 `brew` ，体验是非常不错的。
+
+## IDE 的选择
+
+由于本书中，我们会分别涉及到前端和后端的工程，一般来说，前端的工程我个人更喜欢轻量级编辑器，而对于后端来说，一个完善的 IDE 还是必要的。
+
+### Visual Studio Code
+
+因此轻量级编辑器，我推荐 `Visual Studio Code` \( [https://code.visualstudio.com/](https://code.visualstudio.com/) ，注意，访问不了时需要科学上网\)， 简称 `vsc` ，但大家可不要被名字欺骗了，这个东东和 `Visual Studio` 那个大家伙其实没有什么关系，除了都是微软团队做的之外。
+
+### Intellij IDEA
+
+这个老牌 `IDE` 始终是我心中的最佳大型 `IDE` ，即便在 `Eclipse` 最火的年代，我也认为 `IDEA` 比 `Eclipse` 好用太多。
+
+## 字体的选择
+
+
 
 
 
