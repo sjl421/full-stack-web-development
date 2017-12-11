@@ -1,6 +1,6 @@
 # 环境搭建
 
-这个章节中我们会把本书需要安装的开发环境和推荐的 IDE 配置。
+对于开发者来讲，一个友好的、强大的开发环境可以起到事半功倍的作用。这个章节中我们会把本书需要安装的开发环境和推荐的 IDE 配置。
 
 ## Spring Boot 的环境安装
 
@@ -61,5 +61,15 @@ source "$HOME/.sdkman/bin/sdkman-init.sh"
 sdk version
 ```
 
+使用 `sdk` 这个命令就可以很方便安装依赖类库
 
+### macOS
+
+`macOS` 对于开发来讲是非常友好的，首先我们需要安装 `brew` ，这是 `macOS` 上的一个包管理工具，类似于 `Ubuntu` 中的 `apt-get` 。在 `terminal` 中键入下面的命令即可完成安装。
+
+```
+/usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+```
+
+有了 \`brew\` 之后，
 
