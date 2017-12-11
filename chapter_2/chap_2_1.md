@@ -176,3 +176,101 @@ injector.get(Person) !== childInjector.get(Person);
 
 在实际的 Angular 应用中我们其实很少会直接显式使用 `Injector` 去完成注入，而是在对应的模块、组件等的元数据中提供 `providers` 即可，这是由于 Angular 框架帮我们完成了这部分代码，它们其实在元数据配置后由框架放入 `Injector` 中了。
 
+### 组件
+
+组件是 Angular 应用中最基础的 UI 构建元素，从 UI 界面上可以暂时这么简单理解，一个组件就是渲染后的 HTML 页面中的某一块区域的元素、样式以及事件的集合。一个 Angular 的应用其实就是一棵组件树。组件其实是指令的一个子集，但不同的是，组件拥有自己的模板。任何一个组件都必须从属于一个模块，即在模块的 `declarations` 中声明。
+
+`@Component` 修饰符用于标识一个类是 Angular 组件，和模块类似的也有很多元数据属性，一个典型的组件如下面代码所示
+
+```js
+@Component({
+  // 其他组件调用时使用 <app-login></app-login> 标签
+  // selector 可以想象成一个自定义 HTML 标签
+  selector: 'app-login',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `
+    <input type="text" placeholder="您的Email">
+    <input type="password" placeholder="您的密码">
+  `,
+  styleUrls: ['./login.component.scss']
+})
+export class LoginComponent implements OnInit {
+    constructor(){
+        // 省略
+    }
+    
+    ngOnInit(){
+        // 省略
+    }
+}
+```
+
+组件中支持的常见元数据如下：
+
+*  animations：动画定义
+*  changeDetection：设置脏值检测的策略 
+*  encapsulation：样式的封装策略
+*  entryComponents：在此视图中需要动态加载的组件列表 
+*  providers - 对此组件及其子组件可见的 Provider 列表
+*  selector - 用于定位此组件的选择器
+*  styleUrls：外部样式 URL 列表
+*  styles - 内联的样式
+*  template - 内联的模板
+*  templateUrl - 指向外部的模板文件 URL
+*  viewProviders：仅为此组件以及其视图上的子元素可见的 Provider 列表
+
+组件有生命周期的概念：Angular 创建、渲染控件；创建、渲染子控件；当数据绑定属性改变时做检查；在把控件移除 DOM 之前销毁控件等等。Angular 提供生命周期的“钩子”（ Hook ）以便于开发者可以得到这些关键过程的数据以及在这些过程中做出响应的能力。这些函数和顺序可参见下表。上面的例子中我们监听组件的 OnInit 事件。
+
+### 指令
+
+Angular 中的指令分成三种：结构型（ Structural ）指令和属性型（ Attribute ）指令，还有一种是什么呢？就是 `Component` ，组件本身就是一个带模板的、有更多生命周期 Hook 的指令。组件这里就不做讨论了，我们主要看前两种，它们大致的形式可以理解成类似于 HTML 中元素的属性，比如 `<input type="text>"` 中的 `type`，指令和这个表现形式差不多。
+
+下面的 `*ngIf` 就是一个典型的结构型指令，结构型指令一般前方都有一个 `*` ，用于控制 HTML 的布局，它们一般会生成或调整一些 DOM 元素，结构型指令没有绑定的概念，也就不会在指令外面发现 `()` 或 `[]` 。
+
+```html
+<a *ngIf="user.login">退出</a>
+```
+
+那么为什么会有这个看起来这么奇怪的 `*` 呢？它的作用是什么呢？加了这个 `*` ，指令会把自己所在的元素包装在一对 `<ng-template></ng-template>` 的模板之中，也就是说上面的代码相当于下面的形式，注意此时 `*` 没有了，所以其实这个 `*` 也是一个语法糖，写一个 `*` 省去了写个嵌套的 `<ng-template></ng-template>`。
+
+```html
+<ng-template ngIf="user.login">
+  <a>退出</a>
+</ng-template>
+```
+
+把指令所在的元素包含在模板中的好处就是，你可以取得完全的控制权，我们可以根据需要对此模板内的元素显示、隐藏、增加或删除等等。对于这个模板，我们在指令内部可以通过 `TemplateRef` 得到其引用。知道了这些，我们可以一起来看看 `ngIf` 这个指令的源码，你就会明白为什么根据表达式的真假，当前元素就可以显示或不显示了：
+
+```js
+import {Directive, Input, TemplateRef, ViewContainerRef} from '@angular/core';
+@Directive({selector: '[ngIf]'})
+export class NgIf {
+  private _hasView = false;
+
+  constructor(private _viewContainer: ViewContainerRef, private _template: TemplateRef<Object>) {}
+
+  @Input()
+  set ngIf(condition: any) {
+    if (condition && !this._hasView) {
+      this._hasView = true;
+      // 如果条件为真，创建该模板元素
+      this._viewContainer.createEmbeddedView(this._template);
+    } else if (!condition && this._hasView) {
+      this._hasView = false;
+      // 否则清空视图
+      this._viewContainer.clear();
+    }
+  }
+}
+```
+
+常见的内建结构型指令除了 `ngIf` 还有 `ngFor` 和 `ngSwitchCase` 等。
+
+属性型指令是改变 DOM 元素的外观或行为的指令，而常见的内建属性型指令有 `ngModel` 和 `ngClass` ，其中 `ngModel` 我们会在后面的模板驱动型表单中讲解，这里看一下 `ngClass` 。很多时候，我们希望动态的改变元素或组件的样式，这个时候 `ngClass` 就派上用场了。 `ngClass` 可以接收很多种类型的参数，包括以空格分隔的字符串、数组以及像下面这样的对象。对象的 `key` 是 CSS 的类名，`value` 是一个布尔值。个人以为这种对象的形式最为灵活，因为你可以在程序中动态控制各个 CSS 类的 `true` 或 `false`，即是否使用。
+
+```html
+<some-element [ngClass]="{'first': true, 'second': true, 'third': false}">...</some-element>
+```
+
+属性型指令经常会在 DOM 元素属性的外面套上 \`\[\]\` 或 \`\(\)\` ，比如上面的 \`\[ngClass\]="xxx"\` ， \`\[\]\` 是说 \`"xxx"\` 是一个表达式（或者对象或变量），请将这个表达式的值赋值给 \`ngClass\` 。但如果不加 \`\[\]\` ，那么 Angular 会认为你要把 \`"xxx"\` 这个 \*\*字符串\*\* 赋值给 \`ngClass\` 了。那么 \`\(\)\` 呢？这个是用来绑定事件的，有时候指令或组件会有事件（也就是输出型参数），这个时候就需要用 \`\(\)\` 绑定这个事件，用来监听处理。
+
