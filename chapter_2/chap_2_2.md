@@ -22,5 +22,31 @@ Angular Material 是 Angular 团队官方开发的一套符合 Google Material �
 
 Google 的 Material 设计语言中，对于一个应用的布局经常采用的形式是一个内容区块加上一个侧面菜单，这个菜单既可以是滑出的也可以是固定在侧面的。
 
-![](/assets/chap_2_2_002.png)
+![常见的布局方式](/assets/chap_2_2_002.png)
+
+所以呢，对于这种常见的布局，Google 提供了一种布局控件 -- Sidenav -- 来帮助开发者很方便的实现。
+
+```html
+<mat-sidenav-container fullscreen>
+    <mat-sidenav #sidenav mode="over">
+      <app-sidebar></app-sidebar>
+    </mat-sidenav>
+    <div class="site">
+      <header>
+        ...
+      </header>
+      <main>
+        <router-outlet></router-outlet>
+      </main>
+      <footer>
+        ...
+      </footer>
+    </div>
+  </mat-sidenav-container>
+```
+
+如上面的代码所示，这种布局一般需要两个组件相互配合，第一个是 `<mat-sidenav-container>`，这一个作为侧滑控件的容器，一般也可以用作整个 App 的容器。然后在这个容器中使用 `<mat-sidenav>` 构建可侧滑的内容。
+
+其实还有一个 `<mat-sidenav-content>`，也就是我们可以把 `<sidenav>` 对应的内容可以放入这个 `<mat-sidenav-content>` 之中，但由于如果不写的话，Angular 也会默认创建一个元素把其他部分封装在里面，所以不写这个也是可以的。
+
 
