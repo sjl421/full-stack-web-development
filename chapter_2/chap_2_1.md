@@ -198,7 +198,7 @@ export class LoginComponent implements OnInit {
     constructor(){
         // 省略
     }
-    
+
     ngOnInit(){
         // 省略
     }
@@ -207,17 +207,17 @@ export class LoginComponent implements OnInit {
 
 组件中支持的常见元数据如下：
 
-*  animations：动画定义
-*  changeDetection：设置脏值检测的策略 
-*  encapsulation：样式的封装策略
-*  entryComponents：在此视图中需要动态加载的组件列表 
-*  providers - 对此组件及其子组件可见的 Provider 列表
-*  selector - 用于定位此组件的选择器
-*  styleUrls：外部样式 URL 列表
-*  styles - 内联的样式
-*  template - 内联的模板
-*  templateUrl - 指向外部的模板文件 URL
-*  viewProviders：仅为此组件以及其视图上的子元素可见的 Provider 列表
+* animations：动画定义
+* changeDetection：设置脏值检测的策略 
+* encapsulation：样式的封装策略
+* entryComponents：在此视图中需要动态加载的组件列表 
+* providers - 对此组件及其子组件可见的 Provider 列表
+* selector - 用于定位此组件的选择器
+* styleUrls：外部样式 URL 列表
+* styles - 内联的样式
+* template - 内联的模板
+* templateUrl - 指向外部的模板文件 URL
+* viewProviders：仅为此组件以及其视图上的子元素可见的 Provider 列表
 
 组件有生命周期的概念：Angular 创建、渲染控件；创建、渲染子控件；当数据绑定属性改变时做检查；在把控件移除 DOM 之前销毁控件等等。Angular 提供生命周期的“钩子”（ Hook ）以便于开发者可以得到这些关键过程的数据以及在这些过程中做出响应的能力。这些函数和顺序可参见下表。上面的例子中我们监听组件的 OnInit 事件。
 
@@ -272,5 +272,102 @@ export class NgIf {
 <some-element [ngClass]="{'first': true, 'second': true, 'third': false}">...</some-element>
 ```
 
-属性型指令经常会在 DOM 元素属性的外面套上 \`\[\]\` 或 \`\(\)\` ，比如上面的 \`\[ngClass\]="xxx"\` ， \`\[\]\` 是说 \`"xxx"\` 是一个表达式（或者对象或变量），请将这个表达式的值赋值给 \`ngClass\` 。但如果不加 \`\[\]\` ，那么 Angular 会认为你要把 \`"xxx"\` 这个 \*\*字符串\*\* 赋值给 \`ngClass\` 了。那么 \`\(\)\` 呢？这个是用来绑定事件的，有时候指令或组件会有事件（也就是输出型参数），这个时候就需要用 \`\(\)\` 绑定这个事件，用来监听处理。
+属性型指令经常会在 DOM 元素属性的外面套上 `[]` 或 `()` ，比如上面的 `[ngClass]="xxx"` ， `[]` 是说 `"xxx"` 是一个表达式（或者对象或变量），请将这个表达式的值赋值给 `ngClass` 。但如果不加 `[]` ，那么 Angular 会认为你要把 `"xxx"` 这个**字符串**赋值给 `ngClass` 了。那么 `()` 呢？这个是用来绑定事件的，有时候指令或组件会有事件（也就是输出型参数），这个时候就需要用 `()` 绑定这个事件，用来监听处理。
+
+### 管道
+
+管道是一种在模板中使用的快速方便进行数据的变换的快捷方式，使用上来说是 `| 管道名称: "参数"` 这样的形式。 这个特性可以让我们很快的将数据在界面上以我们想要的格式输出出来。看一个小例子：
+
+```js
+import { Component, OnDestroy } from '@angular/core'; 
+
+@Component({ 
+    selector: 'app-playground', 
+    template: `
+    <p>Without Pipe: Today is {{ birthday }} </p> 
+    <p>With Pipe: Today is {{ birthday | date:"MM/dd/yy" }} </p>
+    `, 
+    styleUrls: ['./playground.component.css'] 
+}) 
+export class PlaygroundComponent { 
+    birthday = new Date(); 
+    constructor() { } 
+}
+```
+
+### 模块
+
+首先什么是模块？简单来说就是把一些功能组织到一起完成一个相对独立的事情。打个比方，常见的应用都有登录、注册、忘记密码这些功能，但这些功能在应用中其他的地方使用的场景多吗？好像是联系不大，这块功能是相对独立的，那么也就是说我们可以把这些登录注册相关的功能封装在一个模块中（这里我们把这个模块起个名字，叫 `AuthModule` 吧），然后提供一些必要的接口和组件给外部，系统的其他部分想调用时可以导入这个模块就行了，无需关心这些功能是怎么实现的。比如说我们在登录模块中增加一个微信登录的方式，我们就只需要在这个 `AuthModule` 中改动即可，其他模块不需要进行更改。
+
+可能有些熟悉 Javascript 的同学还会问，Javascript 中已经有模块的概念了，为什么还要再搞出一个呢？这是由于 Javascript 中的模块概念是每一个文件是一个模块，但是当我们有很多文件时，比如我们有 10 个文件，而这时我们需要增加 5 个文件，这两个文件呢是需要依赖这 10 个文件的，那么我们就需要在这 5 个文件中 `import` 那 10 个文件。当工程大起来之后，你想想这个工作量和代码维护性。所以用模块形式组织代码是大工程的必要步骤。
+
+在 Angular 中，我们会使用一个 `@NgModule` 的修饰符来标识一个类是模块，在这个修饰符中，我们会定义一个模块的元数据：
+
+*  declarations：用于列出属于此模块的组件、指令和管道
+*  imports：用于导入该模块依赖的其他模块
+*  exports：如果有想让其他模块使用的组件、指令和管道，在此列出
+*  providers：列出提供给模块内部用于注入的资源，通常是服务
+*  entryComponents：列出进入模块就要实例化的组件，用于动态加载
+*  bootstrap：只有根模块有此项，用于指定应用启动后的根组件
+
+一个典型的模块在 Angular 中的定义是长成下面的样子：
+
+```js
+@NgModule({
+    declarations: [ // 此模块包含的组件/指令/管道都列在这个数组中
+        HomeComponent, 
+        AComponent, BComponent, 
+        CDirective, 
+        DPipe,
+    ],
+    imports: [ // 该模块所依赖的其他模块在这个数组中列出进行导入
+        CommonModule, 
+        ThridPartyModule, 
+    ],
+    exports: [ // 导出给外部模块可以使用的组件/指令/管道等
+        AComponent
+    ]
+    providers: [ // 该模块要提供给模块内部注入使用的类库，一般是服务
+        MyOwnService,
+    ],
+    entryComponents: [ // 对于有些组件需要在进入模块后就创建出来，比如对话框等 
+        HomeComponent
+    ]
+})
+export class MyModule { }
+```
+
+任何一个 Angular 应用至少有一个模块：根模块。习惯上我们把根模块命名为 `AppModule`。另外需要注意一点，模块是一个类，尽管很多时候我们都没有为这个类写具体的方法，但这不代表这个类不能写具体的内部的成员方法。事实上，有一些情况你是非得写方法才可以达成目标的，比如：如果你希望模块被导入后要进行一些初始化工作：
+
+```js
+@NgModule({
+    // 省略
+})
+export class MyModule { 
+    constructor(){
+        doInitWork();
+    }
+    void doInitWork(){
+      // 省略
+    }
+}
+```
+
+我们看到内建的模块比如 `HttpModule` 或者很多第三方模块，在导入的同时，其提供的 `Providers` 也就可以调用了，并不用显式的在我们的 `Module` 中的 `providers` 数组中列出。这其实也是利用了模块的构造或实例方法完成的。像下面的例子中，我们在模块类中提供一个静态方法返回模块和 `providers`，这样只要在根模块中的 `imports` 中写 `MyModule.forRoot()` 即可完成导入模块的同时将模块提供的 `providers` 也提供给根模块。注意一点，命名上习惯性的将只在根模块使用的方法命名为 `forRoot` 。
+
+```js
+@NgModule({
+  // 省略
+})
+class MyModule {
+  static forRoot() {
+    return {
+      ngModule: MyModule,
+      providers: [ AuthService ]
+    }
+  }
+}
+```
+
+
 
