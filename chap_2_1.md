@@ -12,13 +12,46 @@ Angular 中经常提到的几个概念：依赖性注入、模块、组件、指
 
 依赖性注入（ Dependency Injection ）其实不是 Angular 独有的概念，这是一个已经存在很长时间的设计模式，也可以叫做控制反转 （ Inverse of Control ）。我们从下面这个简单的代码片段入手来看看什么是依赖性注入以及为什么要使用依赖性注入。
 
-```ts
+```js
 class Person {
   constructor() {
     this.address = new Address('北京', '北京', '朝阳区', 'xx街xx号');
     this.id = Id.getInstance(ID_TYPES.IDCARD);
   }
 }
+```
+
+上面的代码中，我们在 `Person` 这个类的构造函数中初始化了我们构建 `Person` 所需要的依赖类： `Address` 和 `Id` ，其中 `Address` 是个人的地址对象，而 `Id` 是个人身份对象。这段代码的问题在于除了引入了内部所需的依赖之外， **它知道了这些依赖创建的细节** ，比如它知道 `Address` 的构造函数需要的参数（省、市、区和街道地址）和这些参数的顺序，它还知道 `Id` 的工厂方法和其参数（取得身份证类型的 `Id` ）。
+
+但这样做的问题究竟是什么呢？首先这样的代码是非常难以进行单元测试的，因为在测试的时候我们往往需要构造一些不同的测试场景（比如我们想传入护照类型的 `Id` ），但这种写法导致你没办法改变其行为。其次，我们在代码的可维护性和扩展性方面有了很大的障碍，设想一下如果我们改变了 `Address` 的构造函数或 `Id` 的工厂方法的话，我们不得不去更改 `Person` 类。一个类还好，但如果几十个类都依赖 `Address` 或 `Person` 的话，这会造成多大的麻烦？
+
+那么解决的方法呢？也很简单，那就是我们把 `Person` 的构造改造一下：
+
+```js
+class Person {
+  constructor(address, id) {
+    this.address = address;
+    this.id = id;
+  }
+}
+```
+
+我们在构造中接受已经创建的 `Address` 和 `Id` 对象，这样在这段代码中就没有任何关于它们的具体实现了。换句话说，我们把创建这些依赖性的职责向上一级传递了出去（噗~~推卸责任啊）。现在我们在生产代码中可以这样构造 `Person` ：
+
+```js
+const person = new Person(
+  new Address('北京', '北京', '朝阳区', 'xx街xx号'),
+  Id.getInstance(ID_TYPES.IDCARD)
+);
+```
+
+而在测试时，可以方便的构造各种场景，比如我们将地区改为辽宁：
+
+```js
+const person = new Person(
+  new Address('辽宁', '沈阳', '和平区', 'xx街xx号'),
+  Id.getInstance(ID_TYPES.PASSPORT)
+);
 ```
 
 
