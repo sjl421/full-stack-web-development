@@ -16,11 +16,13 @@ Angular Material 是 Angular 团队官方开发的一套符合 Google Material �
 
   * 布局类：`List` 、`Grid List` 、`Card` 、 `Stepper` 、 `Tabs` 、`Expansion Panel`
 
-  * 按钮和提示类：`Button` 、`Button Toggle` 、`Icon` 、 `Progress Spinner` 、 `Progress Bar` 
+  * 按钮和提示类：`Button` 、`Button Toggle` 、`Icon` 、 `Progress Spinner` 、 `Progress Bar`
+
   * 弹出类：`Dialog` 、`Tooltip` 、`Snackbar` 、
   * 数据表格类：`Table` 、`Sort Header` 、`Paginator`
 
 * 布局支持：通过独立的 `@angular/flex-layout` 提供，这个软件包不仅提供 flex 的封装，也提供响应式页面设计需要的各种 API 和指令。
+
 * 主题支持：主题的支持主要由框架提供的一系列 `scss` 函数来实现，因此如果希望有主题的自定义时，需要以 `scss` 形式提供样式。
 
 ## 布局控件 - Sidenav
@@ -88,6 +90,8 @@ export class SharedModule {}
   <mat-drawer-content>主要内容</mat-drawer-content>
 </mat-drawer-container>
 ```
+
+
 
 
 
