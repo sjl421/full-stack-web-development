@@ -49,5 +49,33 @@ Google 的 Material 设计语言中，对于一个应用的布局经常采用的
 
 其实还有一个 `<mat-sidenav-content>`，也就是我们可以把 `<sidenav>` 对应的内容可以放入这个 `<mat-sidenav-content>` 之中，但由于如果不写的话，Angular 也会默认创建一个元素把其他部分封装在里面，所以不写这个也是可以的。
 
+这个组件需要封装在了一个叫做 `MatSidenavModule` 的模块中，所以如果要使用的话，需要导入这个模块，我们现在把它放到共享模块当中去：
+
+```js
+import { NgModule } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { MatSidenavModule } from '@angular/material';
+
+const MATERIAL_MODULES = [
+  MatSidenavModule,
+];
+
+const MODULES = [
+  ...MATERIAL_MODULES,
+  CommonModule,
+];
+
+@NgModule({
+  declarations: [],
+  imports: MODULES,
+  exports: [
+    ...MODULES,
+  ]
+})
+export class SharedModule {}
+```
+
+
+
 
 
