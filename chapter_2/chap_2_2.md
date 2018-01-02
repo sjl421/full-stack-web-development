@@ -109,8 +109,12 @@ export class SharedModule {}
 | toggle | 方法 | 反转当前状态 | sidenav.toggle\(\) |
 | opened | 属性 | 打开的状态 | \[opened\]="status" |
 | closed | 属性 | 关闭的状态 | \[closed\]="status" |
-| closedStart | 事件 | 开始关闭的事件  | \(closedStart\)="handleClose\(\)" |
+| closedStart | 事件 | 开始关闭的事件 | \(closedStart\)="handleClose\(\)" |
 | openedStart | 事件 | 开始打开的事件 | \(openedStart\)="handleOpen\(\)" |
+
+## Flex 布局和 Angular Flex-layout
+
+
 
 
 
