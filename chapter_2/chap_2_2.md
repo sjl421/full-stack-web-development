@@ -9,12 +9,14 @@ Angular Material 是 Angular 团队官方开发的一套符合 Google Material �
 总体来说，`@angular/material` 提供了 30 多个组件以及主题和字体的支持，并通过 `@angular/flex-layout` 提供了 `flexbox` 布局的 angular 封装。
 
 * 组件
-  * 表单控件类：`Autocomplete`
-  * 导航类：
-  * 布局类：
-  * 按钮和提示类
-  * 弹出类：
-  * 数据表格类：
+  * 表单控件类：`Autocomplete` 、`Checkbox` 、`Datepicker` 、 `Form Field` 、 `Input` 、`Radio Button` 、`Select` 、`Slider` 、 `Slide Toggle`
+
+  * 导航类：`Menu` 、`Sidenav` 、`Toolbar`
+
+  * 布局类：`List` 、`Grid List` 、`Card` 、 `Stepper` 、 `Tabs` 、`Expansion Panel`
+  * 按钮和提示类：`Button` 、`Button Toggle` 、`Icon` 、 `Progress Spinner` 、 `Progress Bar` 
+  * 弹出类：`Dialog` 、`Tooltip` 、`Snackbar` 、
+  * 数据表格类：`Table` 、`Sort Header` 、`Paginator`
 * 布局支持：通过独立的 `@angular/flex-layout` 提供，这个软件包不仅提供 flex 的封装，也提供响应式页面设计需要的各种 API 和指令。
 * 主题支持：主题的支持主要由框架提供的一系列 `scss` 函数来实现，因此如果希望有主题的自定义时，需要以 `scss` 形式提供样式。
 
@@ -76,6 +78,4 @@ export class SharedModule {}
 ```
 
 这个模块除了提供了 `Sidenav` 之外，还提供了一个类似功能的组件 `Drawer` ，那么问题来了，这个 `Drawer` 和 `Sidenav` 的区别在哪儿呢？答案是区域的大小，如果是整个页面级的侧滑我们使用 `Sidenav` 而对于页面上的某个小区域的话，如果也要实现类似的效果，那么就使用 `Drawer`
-
-
 
