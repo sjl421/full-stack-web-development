@@ -2,7 +2,31 @@
 
 ## 前端项目
 
-Todo
+### 安装 Angular CLI
+
+我们可以通过 `npm` 或者 `yarn` 来安装
+
+```bash
+npm install -g @angular/cli
+```
+
+或者
+
+```
+yarn add global @angular/cli
+```
+
+以上两种安装方式是个人推荐的安装方式，但是由于国内网络的限制，有时候可能安装时间过长或者有些软件包无法下载，这个时候需要你掌握科学上网的姿势。如果实在无法安装成功的话，也可以采用淘宝团队提供的 `cnpm` ，这个 `cnpm` 可以理解成使用淘宝的镜像软件仓库的 `npm` 中国加速版。
+
+```bash
+npm install -g cnpm --registry=https://registry.npm.taobao.org
+```
+
+安装之后，可以使用 `cnpm` 替代文中使用 `yarn` 或 `npm` 进行安装的命令。
+
+### 搭建前端项目框架
+
+
 
 ## 后端项目
 
