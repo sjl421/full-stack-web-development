@@ -4,7 +4,7 @@
 
 ### 安装 Angular CLI
 
-我们可以通过 `npm` 或者 `yarn` 来安装
+`Angular CLI` 是一套命令行工具，可以生成工程的脚手架，它隐藏了很多配置的繁琐细节，可以让我们更专注在逻辑代码的实现上。我们可以通过 `npm` 或者 `yarn` 来安装: 
 
 ```bash
 npm install -g @angular/cli
@@ -24,14 +24,13 @@ npm install -g cnpm --registry=https://registry.npm.taobao.org
 
 安装 `cnpm` 之后，可以使用 `cnpm` 替代文中使用 `yarn` 或 `npm` 进行安装的命令。
 
-可以通过如下命令测试 `cli` 是否安装成功：
+可以通过如下命令测试 `cli` 是否安装成功，这个 `ng` 命令我们会经常用到，为什么叫 `ng` ？因为 `angular` 的简写就是 `ng` 啦：
 
 ```
 ng version
 ```
 
 如果输出的是类似下面的样子，那么就一切 OK 啦
-
 
         _                      _                 ____ _     ___
        / \   _ __   __ _ _   _| | __ _ _ __     / ___| |   |_ _|
@@ -53,10 +52,59 @@ ng version
 首先我们使用 `Angular CLI` 创建一个新的工程：
 
 ```
-ng new client --style scss
+ng new client --style scss --skip-install
 ```
 
+这里注意 `ng new <project name>` 就是创建一个 `Angular` 工程，而后面的参数 `--style scss` 是告诉 `cli` 在创建工程时，我们会采用 `scss` 作为工程的样式工具，如果不加这个参数的话，工程默认的是 `css` 。`scss` 我们这里不会详细的讲解，有疑问的同学可以去 [http://sass-lang.com/](http://sass-lang.com/) 学习，简单来说，`scss` 就是可编程的 `css` 。
 
+这个命令执行的过程可能会有点长，而且它默认的使用了 `yarn` 进行安装，所以我们加了 `--skip-install` 这个参数跳过依赖的安装，这样后面如果你想使用 `cnpm` 可以进入 `client` 目录手动安装依赖 `cnpm install` ，当然使用推荐的安装命令的话就是 `yarn install` 或 `npm install`。需要注意的一点是 `client` 目录才是工程目录，大部分的 `cli` 子命令都需要在此目录下执行才能生效。
+
+```bash
+> ng new client --style scss --skip-install
+  create client/README.md (1022 bytes)
+  create client/.angular-cli.json (1243 bytes)
+  create client/.editorconfig (245 bytes)
+  create client/.gitignore (516 bytes)
+  create client/src/assets/.gitkeep (0 bytes)
+  create client/src/environments/environment.prod.ts (51 bytes)
+  create client/src/environments/environment.ts (387 bytes)
+  create client/src/favicon.ico (5430 bytes)
+  create client/src/index.html (293 bytes)
+  create client/src/main.ts (370 bytes)
+  create client/src/polyfills.ts (2405 bytes)
+  create client/src/styles.scss (80 bytes)
+  create client/src/test.ts (1085 bytes)
+  create client/src/tsconfig.app.json (211 bytes)
+  create client/src/tsconfig.spec.json (304 bytes)
+  create client/src/typings.d.ts (104 bytes)
+  create client/e2e/app.e2e-spec.ts (288 bytes)
+  create client/e2e/app.po.ts (208 bytes)
+  create client/e2e/tsconfig.e2e.json (235 bytes)
+  create client/karma.conf.js (923 bytes)
+  create client/package.json (1311 bytes)
+  create client/protractor.conf.js (722 bytes)
+  create client/tsconfig.json (363 bytes)
+  create client/tslint.json (3040 bytes)
+  create client/src/app/app.module.ts (316 bytes)
+  create client/src/app/app.component.scss (0 bytes)
+  create client/src/app/app.component.html (1141 bytes)
+  create client/src/app/app.component.spec.ts (986 bytes)
+  create client/src/app/app.component.ts (208 bytes)
+Successfully initialized git.
+Project 'client' successfully created.
+```
+
+如果看到类似上面的输出结果，工程就生成完毕了，我们进入 `client` 目录。
+
+```
+cd client
+```
+
+我们的工程最后会如下图的组织形式一样
+
+![](/assets/chap_1_3_client_structure.png)
+
+但在一开始，我们先建立两个模块，一个叫核心模块 \(CoreModule\) ，另一个叫共享模块 \(SharedModule\)。核心模块的作用是初始化应用以及加载必要需要**单例**的功能，最常见的情况是，我们通常把 Http 的服务放到核心模块中
 
 ## 后端项目
 
