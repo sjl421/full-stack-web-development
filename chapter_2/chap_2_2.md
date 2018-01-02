@@ -112,9 +112,28 @@ export class SharedModule {}
 | closedStart | 事件 | 开始关闭的事件 | \(closedStart\)="handleClose\(\)" |
 | openedStart | 事件 | 开始打开的事件 | \(openedStart\)="handleOpen\(\)" |
 
+这个给出一个 `toggle` 的例子，我们给 `Sidenav` 起一个引用名字 `sidenav` ，然后在 `button` 的点击事件处理中调用 `toggle()`
+
+```html
+<mat-sidenav-container fullscreen>
+  <mat-sidenav #sidenav mode="over">
+    <app-sidebar></app-sidebar>
+  </mat-sidenav>
+  <div class="site">
+    <header>
+      <button (click)="sidenav.toggle()"> 切换开关状态 </button>
+    </header>
+    <main>
+      <router-outlet></router-outlet>
+    </main>
+    <footer>
+      ...
+    </footer>
+  </div>
+</mat-sidenav-container>
+```
+
 ## Flex 布局和 Angular Flex-layout
-
-
 
 
 
