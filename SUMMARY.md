@@ -1,7 +1,7 @@
 # Summary
 
 * [前言](README.md)
-* [第一章：打造一个更具生产力的环境](chapter_1/chap_1_0.md))
+* [第一章：打造一个更具生产力的环境](chapter_1/chap_1_0.md)
   * [1.1 技术选型](chapter_1/chap_1_1.md)
   * [1.2 环境搭建](chapter_1/chap_1_2.md)
   * [1.3 工程项目的结构](chapter_1/chap_1_3.md)
