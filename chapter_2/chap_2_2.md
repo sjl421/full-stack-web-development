@@ -175,6 +175,32 @@ yarn add @angular/flex-layout
 * fxLayoutAlign：指定子元素按容器方向和交叉轴 \(`cross axis` \) 的排布方式，相当于 `css` 中的 `justify-content` 和 `align-content` 
 * fxFlex：相当于 `css` 中的 `flex` ，可以接受三个值 -- `flex-grow` 、 `flex-shrink` 、 `flex-basis`
 
+这些指令可以和 `@angular/flex-layout` 的媒体查询断点结合使用
+
+| 断点 | 媒体查询 |
+| :--- | :--- |
+| xs | 'screen and \(max-width: 599px\)' |
+| sm | 'screen and \(min-width: 600px\) and \(max-width: 959px\)' |
+| md | 'screen and \(min-width: 960px\) and \(max-width: 1279px\)' |
+| lg | 'screen and \(min-width: 1280px\) and \(max-width: 1919px\)' |
+| xl | 'screen and \(min-width: 1920px\) and \(max-width: 5000px\)' |
+| lt-sm | 'screen and \(max-width: 599px\)' |
+| lt-md | 'screen and \(max-width: 959px\)' |
+| lt-lg | 'screen and \(max-width: 1279px\)' |
+| lt-xl | 'screen and \(max-width: 1919px\)' |
+| gt-xs | 'screen and \(min-width: 600px\)' |
+| gt-sm | 'screen and \(min-width: 960px\)' |
+| gt-md | 'screen and \(min-width: 1280px\)' |
+| gt-lg | 'screen and \(min-width: 1920px\)' |
+
+也就是我们可以这样来写一个响应式布局
+
+```html
+<div fxFlex="50%" fxFlex.gt-sm="100%">
+...
+</div>
+```
+
 ### 完成首页布局
 
 我们要对首页进行的布局初看上去比较简单，但当内容较少的时候，`footer` 一般会上移，这就比较难看了，我们希望的是，无论内容多少，`footer` 始终在页尾，下面我们看看怎样使用 `flex` 布局达成这个效果：
