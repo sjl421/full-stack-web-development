@@ -75,7 +75,5 @@ const MODULES = [
 export class SharedModule {}
 ```
 
-
-
-
+这个模块除了提供了 `Sidenav` 之外，还提供了一个类似功能的组件 `Drawer` ，那么问题来了，这个 `Drawer` 和 `Sidenav` 的区别在哪儿呢？
 
