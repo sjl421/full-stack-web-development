@@ -73,7 +73,7 @@ sdk version
 
 有了 `brew` 之后，再安装其他的软件就简单多了，使用 `brew install` 命令就可以安装你希望的软件了。
 
-`mac` 原生的 `terminal` 其实还算不错啦，但如果我们将默认的 `shell` 从 `bash` 换成 `zsh` 的话，更准确的说是，用 `OhMyZsh`  \([https://github.com/robbyrussell/oh-my-zsh](https://github.com/robbyrussell/oh-my-zsh)\) 的话，整个 `terminal` 环境就会美妙的不要不要的。
+`mac` 原生的 `terminal` 其实还算不错啦，但如果我们将默认的 `shell` 从 `bash` 换成 `zsh` 的话，更准确的说是，用 `OhMyZsh`  \( [https://github.com/robbyrussell/oh-my-zsh](https://github.com/robbyrussell/oh-my-zsh) \) 的话，整个 `terminal` 环境就会美妙的不要不要的。
 
 安装也只要一行而已：
 
@@ -81,7 +81,7 @@ sdk version
 sh -c "$(curl -fsSL https://raw.githubusercontent.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
 ```
 
-`OhMyZsh` 有很多既好看又好用的主题，这个推荐一个笔者非常喜欢的主题 `spaceship` \([https://github.com/denysdovhan/spaceship-zsh-theme](https://github.com/denysdovhan/spaceship-zsh-theme)\)，安装的话，可以在 `terminal` 中输入
+`OhMyZsh` 有很多既好看又好用的主题，这个推荐一个笔者非常喜欢的主题 `spaceship` \( [https://github.com/denysdovhan/spaceship-zsh-theme](https://github.com/denysdovhan/spaceship-zsh-theme) \)，安装的话，可以在 `terminal` 中输入
 
 ```
 curl -o - https://raw.githubusercontent.com/denysdovhan/spaceship-zsh-theme/master/install.zsh | zsh
