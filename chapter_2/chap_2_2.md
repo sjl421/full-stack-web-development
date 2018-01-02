@@ -169,7 +169,13 @@ export class SharedModule {}
 yarn add @angular/flex-layout
 ```
 
+### 常见的指令和用法
 
+* fxLayout：标识一个元素为 `flex` 容器，值分为 `row` 和 `column` ，指明容器方向。
+* fxLayoutAlign：指定子元素按容器方向和交叉轴 \(`cross axis` \) 的排布方式，相当于 `css` 中的 `justify-content` 和 `align-content` 
+* fxFlex：相当于 `css` 中的 `flex` ，可以接受三个值 -- `flex-grow` 、 `flex-shrink` 、 `flex-basis`
+
+### 完成首页布局
 
 我们要对首页进行的布局初看上去比较简单，但当内容较少的时候，`footer` 一般会上移，这就比较难看了，我们希望的是，无论内容多少，`footer` 始终在页尾，下面我们看看怎样使用 `flex` 布局达成这个效果：
 
@@ -198,10 +204,10 @@ html, body, app-root, mat-sidenav-container {
 }
 ```
 
-首先我们在 `styles.scss` 中将几个顶级元素 \( `html` `body` `app-root` 以及 `mat-sidenav-container`  \) 的边距设为 `0` ，并且让它们充满整个空间。
+首先我们在 `styles.scss` 中将几个顶级元素 \( `html` `body` `app-root` 以及 `mat-sidenav-container`  \) 的边距设为 `0` ，并且让它们充满整个空间。然后我们需要把主要内容区域设置成一个垂直方向的  `flex box` \( `<div class="site" fxLayout="column">` \) ，这样它的子元素 \( `header` 、 `main` 、 `footer`  \) 会按照纵向排列。而我们对于 `main` 又设置了 `fxFlex="1"` 使得这个元素会尽可能占据剩余空间，这样它就会把 `header` 和 `footer` 分别挤到页首和页尾，这样也就达成了我们的目的。
 
 ```html
-<mat-drawer-container [class.myapp-dark-theme]="dark" fullscreen>
+<mat-drawer-container fullscreen>
   <mat-drawer #sidenav mode="over">
     ...
   </mat-drawer>
@@ -209,7 +215,7 @@ html, body, app-root, mat-sidenav-container {
     <header>
       ...
     </header>
-    <main fxFlex="1" fxLayout="column" fxLayoutAlign="center">
+    <main fxFlex="1" fxLayout="column" fxLayoutAlign="center strech">
       <router-outlet></router-outlet>
     </main>
     <footer>
