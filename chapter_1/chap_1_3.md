@@ -12,7 +12,7 @@ npm install -g @angular/cli
 
 或者
 
-```
+```bash
 yarn add global @angular/cli
 ```
 
@@ -26,7 +26,7 @@ npm install -g cnpm --registry=https://registry.npm.taobao.org
 
 可以通过如下命令测试 `cli` 是否安装成功，这个 `ng` 命令我们会经常用到，为什么叫 `ng` ？因为 `angular` 的简写就是 `ng` 啦：
 
-```
+```bash
 ng version
 ```
 
@@ -42,7 +42,7 @@ ng version
     Angular CLI: 1.6.0
     Node: 8.9.0
     OS: darwin x64
-    Angular: 
+    Angular:
     ...
 
 如果不是呢，那么很不幸，就是安装过程中有错误，你需要重复上面的安装步骤直至安装成功为止。
@@ -51,7 +51,7 @@ ng version
 
 首先我们使用 `Angular CLI` 创建一个新的工程：
 
-```
+```bash
 ng new client --style scss --skip-install
 ```
 
@@ -96,7 +96,7 @@ Project 'client' successfully created.
 
 如果看到类似上面的输出结果，工程就生成完毕了，我们进入 `client` 目录。
 
-```
+```bash
 cd client
 ```
 
@@ -121,7 +121,7 @@ success Saved lockfile.
 
 但在一开始，我们先建立两个模块，一个叫核心模块 \(CoreModule\) ，另一个叫共享模块 \(SharedModule\)。核心模块的作用是初始化应用以及加载必要需要**单例**的功能，最常见的情况是，我们通常把 Http 的服务放到核心模块中，因为通常情况下，我们希望服务只被创建一次。
 
-```
+```bash
 > ng g m core
   create src/app/core/core.module.ts (188 bytes)
 ```
@@ -149,7 +149,7 @@ export class CoreModule {
 而共享模块通常包含需要在应用的多处使用的组件、指令、管道或其他共享代码，在共享模块中，我们经常会做模块的导入和导出，这个看似吃力不讨好的操作是为了让所有导入共享模块的其他功能模块不用再去导入。
 
 ```bash
-ng g m shared   
+ng g m shared
   create src/app/shared/shared.module.ts (190 bytes)
 ```
 

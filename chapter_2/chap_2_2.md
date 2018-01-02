@@ -10,7 +10,7 @@ yarn add @angular/material @angular/cdk
 
 如果看到类似下面的输出，那就安装成功了
 
-```
+```bash
 •100% ➜ yarn add @angular/material @angular/cdk
 yarn add v1.3.2
 [1/4] 🔍  Resolving packages...
@@ -172,7 +172,7 @@ yarn add @angular/flex-layout
 ### 常见的指令和用法
 
 * fxLayout：标识一个元素为 `flex` 容器，值分为 `row` 和 `column` ，指明容器方向。
-* fxLayoutAlign：指定子元素按容器方向和交叉轴 \(`cross axis` \) 的排布方式，相当于 `css` 中的 `justify-content` 和 `align-content` 
+* fxLayoutAlign：指定子元素按容器方向和交叉轴 \(`cross axis` \) 的排布方式，相当于 `css` 中的 `justify-content` 和 `align-content`
 * fxFlex：相当于 `css` 中的 `flex` ，可以接受三个值 -- `flex-grow` 、 `flex-shrink` 、 `flex-basis`
 
 这些指令可以和 `@angular/flex-layout` 的媒体查询断点结合使用

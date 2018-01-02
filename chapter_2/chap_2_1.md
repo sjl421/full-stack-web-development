@@ -992,7 +992,7 @@ export class ModelDrivenComponent implements OnInit {
 
 从上面的代码中我们可以看到，这里的表单（ `FormGroup` ）是由一系列的表单控件（ `FormControl` ）构成的。其实 `FormGroup` 的构造函数接受的是三个参数： `controls`（表单控件『数组』，其实不是数组，是一个类似字典的对象） 、 `validator`（验证器） 和  `asyncValidator`（异步验证器） ，其中只有 `controls` 数组是必须的参数，后两个都是可选参数。
 
-```javascript
+```ts
 // FormGroup 的构造函数
 constructor(
   controls: {
@@ -1011,7 +1011,7 @@ password: new FormControl('', [Validators.required])
 
 那么可以看出，这个表单控件的构造函数同样也接受三个**可选**参数，分别是：控件初始值（ `formState` ）、控件验证器或验证器数组（ `validator` ）和控件异步验证器或异步验证器数组（ `asyncValidator` ）。上面的那行代码中，初始值为空字符串，验证器是『必选』，而异步验证器我们没有提供。
 
-```javascript
+```ts
 // FormControl 的构造函数
 constructor(
   formState?: any, // 控件初始值
@@ -1028,7 +1028,7 @@ constructor(
 
 上面的表单构造起来虽然也不算太麻烦，但是在表单项目逐渐多起来之后还是一个挺麻烦的工作，所以 Angular 提供了一种快捷构造表单的方式 -- 使用 FormBuilder。
 
-```javascript
+```ts
 import { Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from "@angular/forms";
 @Component({
@@ -1063,7 +1063,7 @@ export class ModelDrivenComponent implements OnInit {
 
 使用 FormBuilder 我们可以无需显式声明 FormControl 或 FormGroup 。 FormBuilder 提供三种类型的快速构造： `control` , `group` 和 `array` ，分别对应 FormControl, FormGroup 和 FormArray。 我们在表单中最常见的一种是通过 `group` 来初始化整个表单。上面的例子中，我们可以看到 `group` 接受一个字典对象作为参数，这个字典中的 key 就是这个 FormGroup 中 FormControl 的名字，值是一个数组，数组中的第一个值是控件的初始值，第二个是同步验证器的数组，第三个是异步验证器数组（第三个并未出现在我们的例子中）。这其实已经在隐性的使用 `FormBuilder.control` 了，可以参看下面的 FormBuilder 中的 `control` 函数定义，其实 FormBuilder 利用我们给出的值构造了相对应的 `control` ：
 
-```javascript
+```ts
 control(
     formState: Object,
     validator?: ValidatorFn | ValidatorFn[],
@@ -1077,7 +1077,7 @@ control(
 
 对于响应式表单来说，构造一个自定义验证器是非常简单的，比如我们上面提到过的的验证 `密码` 和 `重复输入密码` 是否相同的需求，我们在响应式表单中来试一下。
 
-```javascript
+```ts
   validateEqual(passwordKey: string, confirmPasswordKey: string): ValidatorFn {
     return (group: FormGroup): {[key: string]: any} => {
       const password = group.controls[passwordKey];
@@ -1093,7 +1093,7 @@ control(
 这个函数的逻辑比较简单：我们接受两个字符串（是 FormControl 的名字）,然后返回一个 `ValidatorFn`。但是这个函数里面就奇奇怪怪的，
 比如 `(group: FormGroup): {[key: string]: any} => {...}` 是什么意思啊？还有，这个 `ValidatorFn` 是什么鬼？我们来看一下定义：
 
-```javascript
+```ts
 export interface ValidatorFn {
     (c: AbstractControl): ValidationErrors | null;
 }
@@ -1101,7 +1101,7 @@ export interface ValidatorFn {
 
 这样就清楚了， `ValidatorFn` 是一个对象定义，这个对象中有一个方法，此方法接受一个 `AbstractControl` 类型的参数（其实也就是我们的 FormControl，而 AbstractControl 为其父类），而这个方法还要返回 `ValidationErrors` ，这个 `ValidationErrors` 的定义如下：
 
-```javascript
+```ts
 export declare type ValidationErrors = {
     [key: string]: any;
 };
@@ -1111,7 +1111,7 @@ export declare type ValidationErrors = {
 
 弄清楚这个函数的逻辑后，我们怎么使用呢？非常简单，先看代码：
 
-```javascript
+```ts
     this.user = this.fb.group({
       email: ['', [Validators.required, Validators.email]],
       password: ['', Validators.required],
@@ -1187,7 +1187,7 @@ this.user = this.fb.group({
 
 但这样我们是看不到也增加不了新的地址的，因为我们还没有处理添加的逻辑呢，下面我们就添加一下：其实就是建立一个新的 FormGroup，然后加入 FormArray 数组中。
 
-```javascript
+```ts
   addAddr(): void {
     (<FormArray>this.user.controls['addrs']).push(this.createAddrItem());
   }
@@ -1216,7 +1216,7 @@ this.user = this.fb.group({
 
 首先是无论表单本身还是控件都可以看成是一系列的基于时间维度的数据流了，这个数据流可以被多个观察者订阅和处理，由于 `valueChanges` 本身是个 `Observable`，所以我们就可以利用 RxJS 提供的丰富的操作符，将一个对数据验证、处理等的完整逻辑清晰的表达出来。当然现在我们不会对 RxJS 做深入的讨论，后面有专门针对 RxJS 进行讲解的章节。
 
-```javascript
+```ts
 this.form.valueChanges
         .filter((value) => this.user.valid)
         .subscribe((value) => {
