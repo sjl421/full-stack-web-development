@@ -28,21 +28,21 @@ Google 的 Material 设计语言中，对于一个应用的布局经常采用的
 
 ```html
 <mat-sidenav-container fullscreen>
-    <mat-sidenav #sidenav mode="over">
-      <app-sidebar></app-sidebar>
-    </mat-sidenav>
-    <div class="site">
-      <header>
-        ...
-      </header>
-      <main>
-        <router-outlet></router-outlet>
-      </main>
-      <footer>
-        ...
-      </footer>
-    </div>
-  </mat-sidenav-container>
+  <mat-sidenav #sidenav mode="over">
+    <app-sidebar></app-sidebar>
+  </mat-sidenav>
+  <div class="site">
+    <header>
+      ...
+    </header>
+    <main>
+      <router-outlet></router-outlet>
+    </main>
+    <footer>
+      ...
+    </footer>
+  </div>
+</mat-sidenav-container>
 ```
 
 如上面的代码所示，这种布局一般需要两个组件相互配合，第一个是 `<mat-sidenav-container>`，这一个作为侧滑控件的容器，一般也可以用作整个 App 的容器。然后在这个容器中使用 `<mat-sidenav>` 构建可侧滑的内容。
