@@ -135,5 +135,7 @@ export class SharedModule {}
 
 ## Flex 布局和 Angular Flex-layout
 
+在 `flex` 布局之前，想使用 HTML/CSS/JS 去进行一些特殊布局的话，一般都需要进行一些 hack。可以说 `css` 引入 `flex` 布局给前端开发注入了一股清流。当然之后还有 `grid` 布局等现代布局方式，但由于支持 `grid` 布局的浏览器还不是很普遍，而各主流浏览器对 `flex` 的支持则已经比较成熟了。 
+
 
 
