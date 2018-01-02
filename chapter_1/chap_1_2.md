@@ -73,6 +73,30 @@ sdk version
 
 有了 `brew` 之后，再安装其他的软件就简单多了，使用 `brew install` 命令就可以安装你希望的软件了。
 
+`mac` 原生的 `terminal` 其实还算不错啦，但如果我们将默认的 `shell` 从 `bash` 换成 `zsh` 的话，更准确的说是，用 `OhMyZsh`  \([https://github.com/robbyrussell/oh-my-zsh](https://github.com/robbyrussell/oh-my-zsh)\) 的话，整个 `terminal` 环境就会美妙的不要不要的。
+
+安装也只要一行而已：
+
+```
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
+```
+
+`OhMyZsh` 有很多既好看又好用的主题，这个推荐一个笔者非常喜欢的主题 `spaceship` \([https://github.com/denysdovhan/spaceship-zsh-theme](https://github.com/denysdovhan/spaceship-zsh-theme)\)，安装的话，可以在 `terminal` 中输入
+
+```
+curl -o - https://raw.githubusercontent.com/denysdovhan/spaceship-zsh-theme/master/install.zsh | zsh
+```
+
+然后编辑 `~/.zshrc`
+
+```
+ZSH_THEME="spaceship"
+```
+
+之后重启 `terminal` 你就可以享用这美味的命令行了。
+
+![](/assets/chap_01_02_zsh_spaceship_theme)
+
 ### Windows
 
 `Windows` 作为使用最普及的操作系统，很多开发者却是在 `Windows` 上过度的依赖图形化的 IDE，对于环境配置可能并不熟悉。其实在 `Windows` 搭建一个好用的环境也不是很难，但第一件事是要有一个顺手一些的 `terminal` ，不吹不黑，`Windows` 自带的 `cmd` 就不提了，`PowerShell` 比 `cmd` 好用一些，但也还是比 `*nix` 下的 `terminal` 差着一大截。所以这里强力推荐 `cmder` \( [http://cmder.net/](http://cmder.net/) \)，不但提供 `bash` 的体验到 `Windows`上面，而且集成了很多好用的插件，比如类似 `OhMyZsh` 的 `git` 插件等，对于开发者来说是必备神器啊。
