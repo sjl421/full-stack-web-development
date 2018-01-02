@@ -4,7 +4,7 @@
 
 ### 安装 Angular CLI
 
-`Angular CLI` 是一套命令行工具，可以生成工程的脚手架，它隐藏了很多配置的繁琐细节，可以让我们更专注在逻辑代码的实现上。我们可以通过 `npm` 或者 `yarn` 来安装: 
+`Angular CLI` 是一套命令行工具，可以生成工程的脚手架，它隐藏了很多配置的繁琐细节，可以让我们更专注在逻辑代码的实现上。我们可以通过 `npm` 或者 `yarn` 来安装:
 
 ```bash
 npm install -g @angular/cli
@@ -100,11 +100,87 @@ Project 'client' successfully created.
 cd client
 ```
 
+通过 `yarn install` 或 `npm install` 安装依赖，如果成功，输出的结果和下面的类似：
+
+```bash
+> yarn install
+yarn install v1.3.2
+info No lockfile found.
+[1/4] 🔍  Resolving packages...
+[2/4] 🚚  Fetching packages...
+[3/4] 🔗  Linking dependencies...
+warning "@angular/cli > @angular-devkit/schematics > @schematics/schematics@0.0.11" has unmet peer dependency "@angular-devkit/core@0.0.22".
+[4/4] 📃  Building fresh packages...
+success Saved lockfile.
+✨  Done in 70.30s.
+```
+
 我们的工程最后会如下图的组织形式一样
 
 ![](/assets/chap_1_3_client_structure.png)
 
-但在一开始，我们先建立两个模块，一个叫核心模块 \(CoreModule\) ，另一个叫共享模块 \(SharedModule\)。核心模块的作用是初始化应用以及加载必要需要**单例**的功能，最常见的情况是，我们通常把 Http 的服务放到核心模块中
+但在一开始，我们先建立两个模块，一个叫核心模块 \(CoreModule\) ，另一个叫共享模块 \(SharedModule\)。核心模块的作用是初始化应用以及加载必要需要**单例**的功能，最常见的情况是，我们通常把 Http 的服务放到核心模块中，因为通常情况下，我们希望服务只被创建一次。
+
+```
+> ng g m core
+  create src/app/core/core.module.ts (188 bytes)
+```
+
+上面这个简单命令就是创建模块的命令，`ng` 后的那个 `g` 是 `generate` 的缩写，也就是生成的意思。而 `m` 自然就是  `module` 的缩写，就是模块的意思。如果你想生成组件，类似的就使用 `ng g c <component name>` ，生成指令就写成 `ng g d <directive name>` ，具体的参数其实很多，大家可以使用 `ng help <subcommand name>` 的形式查看。
+
+回到我们的核心模块，将其改造成下面的样子
+
+```js
+import { NgModule, Optional, SkipSelf } from '@angular/core';
+
+export class CoreModule {
+
+  constructor(
+    @Optional() @SkipSelf() parentModule: CoreModule) {
+    if (parentModule) {
+      throw new Error('CoreModule 已经装载，请仅在 AppModule 中引入该模块。');
+    }
+  }
+}
+```
+
+这里改造的目的是让核心模块变成一个单例：应用生命周期内只加载一次。具体的逻辑如果看不懂，请转到第二章的依赖性注入那一节去学习。
+
+而共享模块通常包含需要在应用的多处使用的组件、指令、管道或其他共享代码，在共享模块中，我们经常会做模块的导入和导出，这个看似吃力不讨好的操作是为了让所有导入共享模块的其他功能模块不用再去导入。
+
+```bash
+ng g m shared   
+  create src/app/shared/shared.module.ts (190 bytes)
+```
+
+同样的，我们需要改造一下这个共享模块，为什么要把要导入的，导出的都写成一个数组？这是为了后期导入、导出的东东很多的时候，我们可以方便的重用。
+
+```js
+import { NgModule } from '@angular/core';
+import { CommonModule } from '@angular/common';
+
+const MODULES = [
+  CommonModule,
+];
+
+const DECLARATIONS = [];
+const EXPORT_COMPONENTS = [];
+const ENTRYCOMPONENTS = [];
+
+@NgModule({
+  imports: MODULES,
+  exports: [
+    ...MODULES,
+    ...EXPORT_COMPONENTS
+  ],
+  declarations: DECLARATIONS,
+  entryComponents: [
+    ENTRYCOMPONENTS
+  ]
+})
+export class SharedModule {
+}
+```
 
 ## 后端项目
 
