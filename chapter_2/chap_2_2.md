@@ -2,7 +2,31 @@
 
 Angular Material 是 Angular 团队官方开发的一套符合 Google Material 风格的 Angular UI 组件库。这套组件的使用方式上常常让我联想起 Android 的开发，个人感觉这应该也是 Google 努力的方向之一吧 -- 让 web 开发更像 app 开发或者后端开发。
 
-`@angular/material` 在 `2.0.0-beta.8` 之前是单独的一个 `package`，但后来团队把其中的一些公用功能以及组件抽离出来放到了一个单独的 `@angular/cdk` 包中。这个 `cdk` 以后可以作为你开发自己风格组件库的基础，因为它封装了很多公共特性的支持，你不需要从零开始。
+安装 `@angular/material` 可以在 `terminal` 中敲入
+
+```bash
+yarn add @angular/material @angular/cdk
+```
+
+如果看到类似下面的输出，那就安装成功了
+
+```
+•100% ➜ yarn add @angular/material @angular/cdk
+yarn add v1.3.2
+[1/4] 🔍  Resolving packages...
+[2/4] 🚚  Fetching packages...
+[3/4] 🔗  Linking dependencies...
+[4/4] 📃  Building fresh packages...
+success Saved lockfile.
+success Saved 2 new dependencies.
+├─ @angular/cdk@5.0.2
+└─ @angular/material@5.0.2
+✨  Done in 29.78s.
+```
+
+## 组件类别
+
+`@angular/material` 在 `2.0.0-beta.8` 之前是单独的一个 `package`，但后来团队把其中的一些公用功能以及组件抽离出来放到了一个单独的 `@angular/cdk` 包中。这个 `cdk` \( Component Dev Kit \) 以后可以作为你开发自己风格组件库的基础，因为它封装了很多公共特性的支持，你不需要从零开始。 `cdk` 中提供的主要功能如下图所示：
 
 ![Angular CDK 包含的内容](/assets/chap_2_2_001.png)
 
@@ -135,7 +159,65 @@ export class SharedModule {}
 
 ## Flex 布局和 Angular Flex-layout
 
-在 `flex` 布局之前，想使用 HTML/CSS/JS 去进行一些特殊布局的话，一般都需要进行一些 hack。可以说 `css` 引入 `flex` 布局给前端开发注入了一股清流。当然之后还有 `grid` 布局等现代布局方式，但由于支持 `grid` 布局的浏览器还不是很普遍，而各主流浏览器对 `flex` 的支持则已经比较成熟了。 
+在 `flex` 布局之前，想使用 `HTML/CSS/JS` 去进行一些特殊布局的话，一般都需要进行一些 hack。可以说 `css` 引入 `flex` 布局给前端开发注入了一股清流。当然之后还有 `grid` 布局等现代布局方式，但由于支持 `grid` 布局的浏览器还不是很普遍，而各主流浏览器对 `flex` 的支持则已经比较成熟了。我们这里同样不会对 `flex` 做详细介绍，有需要了解的童鞋可以去 [https://css-tricks.com/snippets/css/a-guide-to-flexbox/](https://css-tricks.com/snippets/css/a-guide-to-flexbox/) 去学习相关知识。
+
+而 `@angular/flex-layout` 是 Angular 团队给出一个基于 `flex` 布局的 Angular 类库，那么为什么不直接使用 `flex` 而要使用这个封装类库呢？其实答案并非非此即彼，很多时候我们是可以混用的，但 `@angular/flex-layout` 提供了方便的指令用来自动化 `flex` 和媒体查询，而且其最大的优势是提供了一个强大的 `Responsive API` ，让开发者可以方便的开发适合多种屏幕布局的响应式应用。
+
+首先安装 `@angular/flex-layout`
+
+```
+yarn add @angular/flex-layout
+```
+
+
+
+我们要对首页进行的布局初看上去比较简单，但当内容较少的时候，`footer` 一般会上移，这就比较难看了，我们希望的是，无论内容多少，`footer` 始终在页尾，下面我们看看怎样使用 `flex` 布局达成这个效果：
+
+```css
+// styles.scss
+
+html, body, app-root, mat-sidenav-container {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.site {
+  width: 100%;
+  min-height: 100%;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.fill-remaining-space {
+  // 使用 flexbox 填充剩余空间
+  // @angular/material 中的很多控件使用了 flex 布局
+  flex: 1 1 auto;
+}
+```
+
+首先我们在 `styles.scss` 中将几个顶级元素 \( `html` `body` `app-root` 以及 `mat-sidenav-container`  \) 的边距设为 `0` ，并且让它们充满整个空间。
+
+```html
+<mat-drawer-container [class.myapp-dark-theme]="dark" fullscreen>
+  <mat-drawer #sidenav mode="over">
+    ...
+  </mat-drawer>
+  <div class="site" fxLayout="column">
+    <header>
+      ...
+    </header>
+    <main fxFlex="1" fxLayout="column" fxLayoutAlign="center">
+      <router-outlet></router-outlet>
+    </main>
+    <footer>
+      ...
+    </footer>
+  </div>
+</mat-drawer-container>
+```
 
 
 
