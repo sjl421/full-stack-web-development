@@ -769,9 +769,9 @@ export class RepeatValidatorDirective implements Validator{
 我们还没有开始正式的写验证逻辑，但上面的框架已经出现了几个有意思的点：
 
 1. Validator 接口要求必须实现的一个方法是 `validate(c: AbstractControl): ValidationErrors | null;` 。这个也就是我们前面提到的验证正确返回 `null` 否则返回一个对象，虽然没有严格的约束，但其 `key` 一般用于表示这个验证器的名字或者验证的规则名字，`value` 一般是失败的原因或验证结果。
-2. 和组件类似，指令也有 `selector` 这个元数据，用于选择那个元素应用该指令，那么我们这里除了要求 DOM 元素应用 `validateEqual` 之外，还需要它是一个 `ngModel` 元素，这样它才是一个 `FormControl`，我们在 `validate` 的时候才是合法的。
-3. 那么那个 `providers` 里面那些面目可憎的家伙又是干什么的呢？ Angular 对于在一个 `FormControl` 上执行验证器有一个内部机制： Angular 维护一个令牌为 `NG_VALIDATORS` 的 `multi provider`（简单来说，Angular 为一个单一令牌注入多个值的这种形式叫 `multi provider` ）。所有的内建验证器都是加到这个 `NG_VALIDATORS`  的令牌上的，因此在做验证时，Angular 是注入了 `NG_VALIDATORS` 的依赖，也就是所有的验证器，然后一个个的按顺序执行。因此我们这里也把自己加到这个 `NG_VALIDATORS` 中去。
-4. 但如果我们直接写成 `useExisting: RepeatValidatorDirective` 会出现一个问题， `RepeatValidatorDirective` 还没有生成，你怎么能在元数据中使用呢？这就需要使用 `forwardRef` 来解决这个问题，它接受一个返回一个类的函数作为参数，但这个函数不会立即被调用，而是在该类声明后被调用，也就避免了 `undefined` 的状况。
+1. 和组件类似，指令也有 `selector` 这个元数据，用于选择那个元素应用该指令，那么我们这里除了要求 DOM 元素应用 `validateEqual` 之外，还需要它是一个 `ngModel` 元素，这样它才是一个 `FormControl`，我们在 `validate` 的时候才是合法的。
+1. 那么那个 `providers` 里面那些面目可憎的家伙又是干什么的呢？ Angular 对于在一个 `FormControl` 上执行验证器有一个内部机制： Angular 维护一个令牌为 `NG_VALIDATORS` 的 `multi provider`（简单来说，Angular 为一个单一令牌注入多个值的这种形式叫 `multi provider` ）。所有的内建验证器都是加到这个 `NG_VALIDATORS`  的令牌上的，因此在做验证时，Angular 是注入了 `NG_VALIDATORS` 的依赖，也就是所有的验证器，然后一个个的按顺序执行。因此我们这里也把自己加到这个 `NG_VALIDATORS` 中去。
+1. 但如果我们直接写成 `useExisting: RepeatValidatorDirective` 会出现一个问题， `RepeatValidatorDirective` 还没有生成，你怎么能在元数据中使用呢？这就需要使用 `forwardRef` 来解决这个问题，它接受一个返回一个类的函数作为参数，但这个函数不会立即被调用，而是在该类声明后被调用，也就避免了 `undefined` 的状况。
 
 下面我们就来实现这个验证逻辑，由于密码和确认密码有主从关系，并非完全的平行关系。也就是说，密码是一个基准对比对象，当密码改变时，我们不应该提示密码和确认密码不符，而是应该将错误放在确认密码中。所以我们给出另一个属性 `reverse`。
 

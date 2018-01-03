@@ -165,7 +165,7 @@ export class SharedModule {}
 
 首先安装 `@angular/flex-layout`
 
-```
+```bash
 yarn add @angular/flex-layout
 ```
 
