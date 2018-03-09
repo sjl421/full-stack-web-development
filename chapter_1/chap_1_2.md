@@ -111,11 +111,21 @@ ZSH_THEME="spaceship"
 
 因此轻量级编辑器，我推荐 `Visual Studio Code` \( [https://code.visualstudio.com/](https://code.visualstudio.com/) ，注意，访问不了时需要科学上网\)， 简称 `vsc` ，但大家可不要被名字欺骗了，这个东东和 `Visual Studio` 那个大家伙其实没有什么关系，除了都是微软团队做的之外。
 
+当然 `vsc` 有好多好用的插件，有了这些插件的配合，无论撸代码还是写文档都爽到爆。
+
+* `Angular 5 Snippets` - Angular 开发的必备工具，太多好用的代码模版了。
+* `Angular Language Service` - 为 Angular 提供代码自动完成、AOT 诊断信息、跳转到定义等实用功能。
+* `Debugger for Chrome` - 调试利器、设置断点、查看变量值等等。
+* `Java Extension Pack` - Java 开发插件集合，包括 `Language Support for Java(TM) by Red Hat`, `Debugger for Java`, `Java Test Runner` 和 `Maven Project Explorer` 四款插件，一般来说如果使用  `maven` 或 `gradle` 作为管理脚本的 `Spring` 相关的 web 开发来说还是不错的。当然 Java 方面对比 `IDEA` 还是有很大差距，因为 `vsc` 定位的时轻量级编辑器而不是完整的 IDE 。
+
 ### Intellij IDEA
 
 这个老牌 `IDE` 始终是我心中的最佳大型 `IDE` ，即便在 `Eclipse` 最火的年代，我也认为 `IDEA` 比 `Eclipse` 好用太多。
 
 ## 字体的选择
 
+笔者日常使用的一款字体是 `Fira Code` ，感觉无论代码编辑器中还是在 `Terminal` 中看上去都极舒服。
 
+![Fira Code 字体效果](/assets/2018-03-02-21-34-10.png)
 
+如果有兴趣的同学可以去 ![https://github.com/tonsky/FiraCode](https://github.com/tonsky/FiraCode) 下载

@@ -107,7 +107,7 @@ const MODULES = [
 export class SharedModule {}
 ```
 
-这个模块除了提供了 `Sidenav` 之外，还提供了一个类似功能的组件 `Drawer` ，那么问题来了，这个 `Drawer` 和 `Sidenav` 的区别在哪儿呢？答案是区域的大小，如果是整个页面级的侧滑我们使用 `Sidenav` 而对于页面上的某个小区域的话，如果也要实现类似的效果，那么就使用 `Drawer`
+这个模块除了提供了 `Sidenav` 之外，还提供了一个类似功能的组件 `Drawer` ，那么问题来了，这个 `Drawer` 和 `Sidenav` 的区别在哪儿呢？答案是区域的大小，如果是整个页面级（也就是全屏）的侧滑我们使用 `Sidenav` 而对于页面上的某个小区域的话，如果也要实现类似的效果，那么就使用 `Drawer`
 
 ```html
 <mat-drawer-container class="container">
@@ -161,7 +161,7 @@ export class SharedModule {}
 
 在 `flex` 布局之前，想使用 `HTML/CSS/JS` 去进行一些特殊布局的话，一般都需要进行一些 hack。可以说 `css` 引入 `flex` 布局给前端开发注入了一股清流。当然之后还有 `grid` 布局等现代布局方式，但由于支持 `grid` 布局的浏览器还不是很普遍，而各主流浏览器对 `flex` 的支持则已经比较成熟了。我们这里同样不会对 `flex` 做详细介绍，有需要了解的童鞋可以去 [https://css-tricks.com/snippets/css/a-guide-to-flexbox/](https://css-tricks.com/snippets/css/a-guide-to-flexbox/) 去学习相关知识。
 
-而 `@angular/flex-layout` 是 Angular 团队给出一个基于 `flex` 布局的 Angular 类库，那么为什么不直接使用 `flex` 而要使用这个封装类库呢？其实答案并非非此即彼，很多时候我们是可以混用的，但 `@angular/flex-layout` 提供了方便的指令用来自动化 `flex` 和媒体查询，而且其最大的优势是提供了一个强大的 `Responsive API` ，让开发者可以方便的开发适合多种屏幕布局的响应式应用。
+而 `@angular/flex-layout` 是 Angular 团队给出一个基于 `flex` 布局的 Angular 类库，那么为什么不直接使用 `flex` 而要使用这个封装类库呢？其实答案并不是非此即彼的，很多时候我们是可以混用的，但 `@angular/flex-layout` 提供了方便的指令用来自动化 `flex` 和媒体查询，而且其最大的优势是提供了一个强大的 `Responsive API` ，让开发者可以方便的开发适合多种屏幕布局的响应式应用。
 
 首先安装 `@angular/flex-layout`
 
@@ -208,7 +208,7 @@ yarn add @angular/flex-layout
 ```css
 // styles.scss
 
-html, body, app-root, mat-sidenav-container {
+html, body, app-root {
   margin: 0;
   width: 100%;
   height: 100%;
@@ -220,6 +220,7 @@ html, body, app-root, mat-sidenav-container {
 }
 
 .full-width {
+  // 这个类和布局无关，后面会使用它来使某些组件可以撑满空间
   width: 100%;
 }
 
@@ -230,13 +231,13 @@ html, body, app-root, mat-sidenav-container {
 }
 ```
 
-首先我们在 `styles.scss` 中将几个顶级元素 \( `html` `body` `app-root` 以及 `mat-sidenav-container`  \) 的边距设为 `0` ，并且让它们充满整个空间。然后我们需要把主要内容区域设置成一个垂直方向的  `flex box` \( `<div class="site" fxLayout="column">` \) ，这样它的子元素 \( `header` 、 `main` 、 `footer`  \) 会按照纵向排列。而我们对于 `main` 又设置了 `fxFlex="1"` 使得这个元素会尽可能占据剩余空间，这样它就会把 `header` 和 `footer` 分别挤到页首和页尾，这样也就达成了我们的目的。
+首先我们在 `styles.scss` 中将几个顶级元素 \( `html` `body` `app-root`  \) 的边距设为 `0` ，并且让它们充满整个空间。 `fullscreen` 指令起的作用和前面的 `css` 差不多，就是让 `mat-sidenav-container` 也变成边距为 `0` ，长宽 `100%` 。然后我们需要把主要内容区域设置成一个垂直方向的  `flex box` \( `<div class="site" fxLayout="column">` \) ，这样它的子元素 \( `header` 、 `main` 、 `footer`  \) 会按照纵向排列。而我们对于 `main` 又设置了 `fxFlex="1"` 使得这个元素会尽可能占据剩余空间，这样它就会把 `header` 和 `footer` 分别**挤**到页首和页尾，这样也就达成了我们的目的。
 
 ```html
-<mat-drawer-container fullscreen>
-  <mat-drawer #sidenav mode="over">
+<mat-sidenav-container fullscreen>
+  <mat-sidenav #sidenav mode="over">
     ...
-  </mat-drawer>
+  </mat-sidenav>
   <div class="site" fxLayout="column">
     <header>
       ...
@@ -248,8 +249,5 @@ html, body, app-root, mat-sidenav-container {
       ...
     </footer>
   </div>
-</mat-drawer-container>
+</mat-sidenav-container>
 ```
-
-
-

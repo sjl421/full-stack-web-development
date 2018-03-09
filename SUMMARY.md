@@ -8,3 +8,5 @@
 * [第二章：开始我们的前端工程](chapter_2/chap_2_0.md)
   * [2.1 Angular 基础概念](chapter_2/chap_2_1.md)
   * [2.2 Angular Material 介绍](chapter_2/chap_2_2.md)
+  * [2.3 添加主题支持](chapter_2/chap_2_3.md)
+  * [2.4 容器化应用](chapter_2/chap_2_4.md)
