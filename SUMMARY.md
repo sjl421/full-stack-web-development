@@ -13,6 +13,6 @@
 * [第三章：何谓后端](chapter_3/chap_3_0.md)
   * [3.1  创建一个 Spring Boot 工程](chapter_3/chap_3_1.md)
   * [3.2  API 的构建可以如此简单](chapter_3/chap_3_2.md)
-  * [3.3  有数据库支撑的 API](chapter_3/chap_3_3.md)
+  * [3.3  有数据库支撑的 API](chapter_3/chap_3_3.md)
   * [3.4  容器化后端](chapter_3/chap_3_4.md)
   * [附录一](appendix/appendix_0.md)

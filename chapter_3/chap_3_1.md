@@ -386,7 +386,7 @@ Hello World!
 我们的项目使用 `Gradle` 来处理多项目的构建，包括大项目和子项目的依赖管理以及容器的建立等。对于 `Gradle` 项目来说，我们会有一个根项目，这个根项目下会建立若干子项目，具体文件结构如下：
 
 ```bash
-|--gtm-backend （根项目）
+|--backend （根项目）
 |----common （共享子项目）
 |------src （子项目源码目录）
 |--------main （子项目开发源码目录）
@@ -457,7 +457,7 @@ project(':report') {
 }
 ```
 
-其中，`buildscript` 区块用于配置 `gradle` 脚本生成时需要的东西，比如配置整个项目需要的插件，构建过程中的依赖以及在其他部分需要引用的依赖类库的版本号等，就像下面这样，我们在 `ext` 中定义了一些变量来集中配置了所有依赖的版本号，无论是根项目还是子项目都可以使用这些变量来指定版本号。这样做的好处是当依赖的版本更新时，我们无需四处更改散落在各处的版本号。此外在这个区块中我们还提供了项目所需的第三方 `Gradle` 插件所需的依赖：`spring-boot-gradle-plugin`、`gradle-docker` 和 `dependency-management-plugin`，这样在后面，各子项目可以简单的使用诸如 `apply plugin: 'io.spring.dependency-management'` 、 `apply plugin: 'docker'` 等即可。
+其中，`buildscript` 区块用于配置 `gradle` 脚本生成时需要的东西，比如配置整个项目需要的插件，构建过程中的依赖以及在其他部分需要引用的依赖类库的版本号等，就像下面这样，我们在 `ext` 中定义了一些变量来集中配置了所有依赖的版本号，无论是根项目还是子项目都可以使用这些变量来指定版本号。这样做的好处是当依赖的版本更新时，我们无需四处更改散落在各处的版本号。此外在这个区块中我们还提供了项目所需的第三方 `Gradle` 插件所需的依赖：`spring-boot-gradle-plugin` 和 `dependency-management-plugin`，这样在后面，各子项目可以简单的使用诸如 `apply plugin: 'io.spring.dependency-management'`  等即可。
 
 ```groovy
 buildscript {
@@ -471,7 +471,6 @@ buildscript {
     }
     dependencies {
         classpath("org.springframework.boot:spring-boot-gradle-plugin:${springBootVersion}")
-        classpath("se.transmode.gradle:gradle-docker:${gradleDockerVersion}")
     }
 }
 ```

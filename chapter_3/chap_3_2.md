@@ -2,10 +2,10 @@
 
 ## API 工程结构
 
-我们 API 是整个后端工程组中的一个子项目，也是我们这个工程的第一个子项目，请按照下面的目录结构方式建立 api 项目目录 -- 在 `gtm-backend` 目录下建立一个子目录 `api`，然后建立对应的目录和文件。
+我们 API 是整个后端工程组中的一个子项目，也是我们这个工程的第一个子项目，请按照下面的目录结构方式建立 api 项目目录 -- 在 `backend` 目录下建立一个子目录 `api`，然后建立对应的目录和文件。
 
 ```bash
-|--gtm-backend （根项目）
+|--backend （后端根项目）
 |----api （API 子项目）
 |------src
 |--------main
@@ -30,7 +30,6 @@ dependencies {
 buildscript {
     ext {
         springBootVersion = '2.0.0.RELEASE'
-        gradleDockerVersion = '1.2'
     }
     repositories {
         maven { setUrl('http://maven.aliyun.com/nexus/content/groups/public/') }
@@ -38,7 +37,6 @@ buildscript {
     }
     dependencies {
         classpath("org.springframework.boot:spring-boot-gradle-plugin:${springBootVersion}")
-        classpath("se.transmode.gradle:gradle-docker:${gradleDockerVersion}")
     }
 }
 
@@ -67,7 +65,7 @@ subprojects {
 }
 ```
 
-并且更新 `gtm-backend` 目录下的 `settings.gradle` 以便包含 `api` 作为子项目
+并且更新 `backend` 目录下的 `settings.gradle` 以便包含 `api` 作为子项目
 
 ```groovy
 include 'api'
@@ -200,7 +198,7 @@ public class Application {
 ./gradlew :api:bootRun
 ```
 
-注意上面的命令是在 `gtm-backend` 根目录执行，而我们的 API 是整个项目的一个子项目，所以采用 `:api` 这种方式指明是哪个子项目，然后使用 `:bootRun` 指定执行什么任务。所以总结起来，运行命令就是下面这个样子
+注意上面的命令是在 `backend` 根目录执行，而我们的 API 是整个项目的一个子项目，所以采用 `:api` 这种方式指明是哪个子项目，然后使用 `:bootRun` 指定执行什么任务。所以总结起来，运行命令就是下面这个样子
 
 ```bash
 ./gradlew :<子项目名称>:<任务名称>
@@ -219,7 +217,7 @@ Task :api:bootRun
  =========|_|==============|___/=/_/_/_/
  :: Spring Boot ::        (v2.0.0.RELEASE)
 
-2018-04-02 09:53:09.506  INFO 48808 --- [           main] dev.local.gtm.api.Application            : Starting Application on wangpengdeMacBook-Pro.local with PID 48808 (/Users/wangpeng/workspace/books/gtm-backend/api/build/classes/java/main started by wangpeng in /Users/wangpeng/workspace/books/gtm-backend/api)
+2018-04-02 09:53:09.506  INFO 48808 --- [           main] dev.local.gtm.api.Application            : Starting Application on wangpengdeMacBook-Pro.local with PID 48808 (/Users/wangpeng/workspace/books/backend/api/build/classes/java/main started by wangpeng in /Users/wangpeng/workspace/books/backend/api)
 2018-04-02 09:53:09.511  INFO 48808 --- [           main] dev.local.gtm.api.Application            : No active profile set, falling back to default profiles: default
 2018-04-02 09:53:09.574  INFO 48808 --- [           main] ConfigServletWebServerApplicationContext : Refreshing org.springframework.boot.web.servlet.context.AnnotationConfigServletWebServerApplicationContext@c8e4bb0: startup date [Mon Apr 02 09:53:09 CST 2018]; root of context hierarchy
 2018-04-02 09:53:10.926  INFO 48808 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port(s): 8080 (http)

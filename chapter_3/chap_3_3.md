@@ -442,3 +442,31 @@ REST 简单来说可以理解成几个基本规则
 1. 以资源名称构成 API 路径，也就是定义资源尽量使用名词
 2. 以动词定义要对资源执行的操作，也就是使用不同的请求方法（GET/POST/PUT/DELETE 等)访问资源路径就代表着要对资源采用什么操作。一般 GET 表示查询， POST 代表新增，PUT 表示更改，而 DELETE 表示删除。
 3. 资源的复数形式表示列表，而列表后跟资源唯一标识表示取得具体列表中的某一资源。
+
+## 让后端也能热更新
+
+热更新顾名思义就是在不停止服务的情况下，将代码的改变立即部署应用到程序中。前端工程领域大部分框架都标配了热更新，这样使得开发的体验非常好。其实后端领域 `node.js` 和一些 `python` 、`ruby` 框架也是支持热更新的 那么 JAVA 后端可不可以呢？Spring Boot 作为一个开箱即用的框架当然会考虑到这一点。
+
+### Spring Boot DevTools
+
+所以我们只需要在 `api` 子项目的 `build.gradle` 中加入一行 `implementation("org.springframework.boot:spring-boot-devtools")` 即可实现热更新了。当然由于 JAVA 不是一个动态语言，所以这个“热更新”其实是重启服务。但 Spring Boot Devtools 提供的“重启”不是冷启动，而是通过两个类加载器，文件没有改变的作为“基线类加载器”，你更新的文件作为“重启类加载器”。只有“重启类加载器”是一次性使用的，用后就丢弃掉，“基线类加载器”并不会每次重新创建，所以这比冷启动要快很多。
+
+```groovy
+apply plugin: 'org.springframework.boot'
+
+dependencies {
+    implementation("org.springframework.boot:spring-boot-devtools")
+    implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.boot:spring-boot-starter-data-rest")
+    implementation("org.springframework.boot:spring-boot-starter-data-mongodb")
+    implementation("org.springframework.data:spring-data-rest-hal-browser")
+}
+```
+
+在 IDEA 中，右键选择 Application，然后选择 `Run Application` 就可以了，现在你尝试更新一些文件，在 console 中就可以看到服务自动重启了。
+
+![在 IDEA 中启动 Spring Boot 应用](/assets/2018-04-04-13-13-58.png)
+
+Spring Boot 默认对 `classpaht` 下的文件更新会触发重启，但对于静态资源，一般情况下不会引起热更新，Spring Boot 默认对以下文件夹的变化不会触发更新 `/META-INF/maven`, `/META-INF/resources`, `/resources`, `/static`, `/public`, 和 `/templates` 。你可以通过调整 `spring.devtools.restart.exclude` 属性来决定哪些文件被排除在更新触发器之外。你同样也可以指定哪些不再 `classpath` 下的文件会触发更新，只需设置属性 `spring.devtools.restart.additional-paths` 即可。
+
+对于静态资源，Spring Boot 提供了 `LiveReload` 的方式进行热更新。但这个在我们的前后端分离项目中没有什么意义，所以就不在这里阐述了，有兴趣的同学可以去 <https://docs.spring.io/spring-boot/docs/current/reference/html/using-boot-devtools.html> 看官方文档。
