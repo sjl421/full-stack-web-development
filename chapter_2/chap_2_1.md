@@ -52,52 +52,51 @@ ng version
 首先我们使用 `Angular CLI` 创建一个新的工程：
 
 ```bash
-ng new client --style scss --skip-install
+ng new frontend --style scss --skip-install
 ```
 
 这里注意 `ng new <project name>` 就是创建一个 `Angular` 工程，而后面的参数 `--style scss` 是告诉 `cli` 在创建工程时，我们会采用 `scss` 作为工程的样式工具，如果不加这个参数的话，工程默认的是 `css` 。`scss` 我们这里不会详细的讲解，有疑问的同学可以去 [http://sass-lang.com/](http://sass-lang.com/) 学习，简单来说，`scss` 就是可编程的 `css` 。
 
-这个命令执行的过程可能会有点长，而且它默认的使用了 `yarn` 进行安装，所以我们加了 `--skip-install` 这个参数跳过依赖的安装，这样后面如果你想使用 `cnpm` 可以进入 `client` 目录手动安装依赖 `cnpm install` ，当然使用推荐的安装命令的话就是 `yarn install` 或 `npm install`。需要注意的一点是 `client` 目录才是工程目录，大部分的 `cli` 子命令都需要在此目录下执行才能生效。
+这个命令执行的过程可能会有点长，而且它默认的使用了 `yarn` 进行安装，所以我们加了 `--skip-install` 这个参数跳过依赖的安装，这样后面如果你想使用 `cnpm` 可以进入 `client` 目录手动安装依赖 `cnpm install` ，当然使用推荐的安装命令的话就是 `yarn install` 或 `npm install`。需要注意的一点是 `frontend` 目录才是工程目录，大部分的 `cli` 子命令都需要在此目录下执行才能生效。
 
 ```bash
-> ng new client --style scss --skip-install
-  create client/README.md (1022 bytes)
-  create client/.angular-cli.json (1243 bytes)
-  create client/.editorconfig (245 bytes)
-  create client/.gitignore (516 bytes)
-  create client/src/assets/.gitkeep (0 bytes)
-  create client/src/environments/environment.prod.ts (51 bytes)
-  create client/src/environments/environment.ts (387 bytes)
-  create client/src/favicon.ico (5430 bytes)
-  create client/src/index.html (293 bytes)
-  create client/src/main.ts (370 bytes)
-  create client/src/polyfills.ts (2405 bytes)
-  create client/src/styles.scss (80 bytes)
-  create client/src/test.ts (1085 bytes)
-  create client/src/tsconfig.app.json (211 bytes)
-  create client/src/tsconfig.spec.json (304 bytes)
-  create client/src/typings.d.ts (104 bytes)
-  create client/e2e/app.e2e-spec.ts (288 bytes)
-  create client/e2e/app.po.ts (208 bytes)
-  create client/e2e/tsconfig.e2e.json (235 bytes)
-  create client/karma.conf.js (923 bytes)
-  create client/package.json (1311 bytes)
-  create client/protractor.conf.js (722 bytes)
-  create client/tsconfig.json (363 bytes)
-  create client/tslint.json (3040 bytes)
-  create client/src/app/app.module.ts (316 bytes)
-  create client/src/app/app.component.scss (0 bytes)
-  create client/src/app/app.component.html (1141 bytes)
-  create client/src/app/app.component.spec.ts (986 bytes)
-  create client/src/app/app.component.ts (208 bytes)
-Successfully initialized git.
-Project 'client' successfully created.
+> ng new frontend --style scss --skip-install
+      Successfully initialized git.
+CREATE frontend/README.md (1030 bytes)
+CREATE frontend/angular.json (3841 bytes)
+CREATE frontend/package.json (1404 bytes)
+CREATE frontend/tsconfig.json (384 bytes)
+CREATE frontend/tslint.json (2819 bytes)
+CREATE frontend/.editorconfig (245 bytes)
+CREATE frontend/.gitignore (503 bytes)
+CREATE frontend/src/environments/environment.prod.ts (51 bytes)
+CREATE frontend/src/environments/environment.ts (743 bytes)
+CREATE frontend/src/favicon.ico (5430 bytes)
+CREATE frontend/src/index.html (295 bytes)
+CREATE frontend/src/main.ts (370 bytes)
+CREATE frontend/src/polyfills.ts (3114 bytes)
+CREATE frontend/src/test.ts (642 bytes)
+CREATE frontend/src/assets/.gitkeep (0 bytes)
+CREATE frontend/src/styles.scss (80 bytes)
+CREATE frontend/src/browserslist (51 bytes)
+CREATE frontend/src/karma.conf.js (1011 bytes)
+CREATE frontend/src/tsconfig.app.json (194 bytes)
+CREATE frontend/src/tsconfig.spec.json (282 bytes)
+CREATE frontend/src/app/app.module.ts (314 bytes)
+CREATE frontend/src/app/app.component.scss (0 bytes)
+CREATE frontend/src/app/app.component.html (1141 bytes)
+CREATE frontend/src/app/app.component.spec.ts (986 bytes)
+CREATE frontend/src/app/app.component.ts (208 bytes)
+CREATE frontend/e2e/protractor.conf.js (752 bytes)
+CREATE frontend/e2e/src/app.e2e-spec.ts (299 bytes)
+CREATE frontend/e2e/src/app.po.ts (208 bytes)
+CREATE frontend/e2e/tsconfig.e2e.json (213 bytes)
 ```
 
-如果看到类似上面的输出结果，工程就生成完毕了，我们进入 `client` 目录。
+如果看到类似上面的输出结果，工程就生成完毕了，我们进入 `frontend` 目录。
 
 ```bash
-cd client
+cd frontend
 ```
 
 通过 `yarn install` 或 `npm install` 安装依赖，如果成功，输出的结果和下面的类似：
@@ -180,6 +179,31 @@ const ENTRYCOMPONENTS = [];
 })
 export class SharedModule {
 }
+```
+
+#### 重新组织代码
+
+默认情况下，新建的项目会自动生成根模块和根组件，这里我们需要做一个调整：在 `src/app` 下只保留 `app.module.ts` ，而将根组件移动到 `src/app/core/containers/app` 中。但移动后，请注意调整相关文件中的引用的路径调整。这样调整的原因是我们希望以后的目录是按照模块或用途进行划分的，整体的目录结构应该是下面图示结构：
+
+```log
+app/
+├── core/
+│   ├── components/
+│   ├── containers/
+│   │   └── app/
+│   │       ├── app.component.html
+│   │       ├── app.component.scss
+│   │       ├── app.component.spec.ts
+│   │       └── app.component.ts
+│   ├── app-routing.module.ts
+│   ├── core.module.ts
+│   └── material.module.ts
+├── domain/
+├── reducers/
+├── shared/
+│   └── shared.module.ts
+├── utils/
+└── app.module.ts
 ```
 
 ## 依赖性注入
@@ -1394,7 +1418,7 @@ this.user = this.fb.group({
 
 而且更重要的是，我们可以使用函数响应式编程的风格来处理各种表单操作，因为响应式表单提供了一系列支持 `Observable` 的接口 API 。那么这又能说明什么呢？有什么用呢？
 
-首先是无论表单本身还是控件都可以看成是一系列的基于时间维度的数据流了，这个数据流可以被多个观察者订阅和处理，由于 `valueChanges` 本身是个 `Observable`，所以我们就可以利用 RxJS 提供的丰富的操作符，将一个对数据验证、处理等的完整逻辑清晰的表达出来。当然现在我们不会对 RxJS 做深入的讨论，后面有专门针对 RxJS 进行讲解的章节。
+首先是无论表单本身还是控件都可以看成是一系列的基于时间维度的数据流了，这个数据流可以被多个观察者订阅和处理，由于 `valueChanges` 本身是个 `Observable`，所以我们就可以利用 `rxjs` 提供的丰富的操作符，将一个对数据验证、处理等的完整逻辑清晰的表达出来。当然现在我们不会对 `rxjs` 做深入的讨论，后面有专门针对 `rxjs` 进行讲解的章节。
 
 ```ts
 this.form.valueChanges
