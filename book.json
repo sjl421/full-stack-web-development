@@ -1,0 +1,8 @@
+{
+  "title": "全栈技能修炼",
+  "author": "王芃",
+  "description": "Spring Boot 2.x 和 Angular 6.x 全栈技能打造效率工具",
+  "language": "zh-hans",
+  "gitbook": ">=3.0.0",
+  "root": "."
+}
