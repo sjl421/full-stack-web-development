@@ -205,6 +205,42 @@ dependencyManagement {
 }
 ```
 
+#### 可选依赖插件
+
+由于 Gradle 没有提供和 Maven 等价的 `optional` 或 `provided` 形式的依赖类型，这个插件是 Spring 团队开发用于扩充 Gradle，让 Maven 和 Gradle 的项目构建方式更加一致。
+
+```groovy
+buildscript {
+    ext {
+        // 省略其他部分
+        propDepsVersion = '0.0.9.RELEASE' // <----------- 增加 propdeps 的版本号定义
+    }
+    repositories {
+        // 省略其他
+        maven { setUrl('http://repo.spring.io/plugins-release') } // <----- 增加 Spring Gradle 插件的软件仓库
+    }
+    dependencies {
+        classpath("io.spring.gradle:propdeps-plugin:${propDepsVersion}") // <---- 增加依赖
+    }
+}
+// 省略其他部分
+subprojects {
+    // 省略其他部分
+    apply plugin: 'java'
+    // 省略其他部分
+    apply plugin: 'propdeps' // <----------- 应用插件
+    apply plugin: 'propdeps-idea' // <----------- 应用插件
+    // 省略其他部分
+    dependencies {
+        optional("org.springframework.boot:spring-boot-configuration-processor") // <----------- 使用可选依赖
+        testImplementation("org.springframework.boot:spring-boot-starter-test")
+    }
+    compileJava.dependsOn(processResources)
+}
+```
+
+安装这个插件并如上设置后，我们以后就可以应对可选依赖了。
+
 ## 通过 Maven 创建
 
 Maven 和 gradle 其实非常类似，只不过 Maven 采用了 `xml` 格式的配置文件，这也是由于 Maven 诞生时，`xml` 确实也还是被广泛认为是可读性很好的一种文件格式。

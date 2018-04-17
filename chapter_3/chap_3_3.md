@@ -147,6 +147,33 @@ local  0.000GB
 
 至此，我们的 MongoDB 测试成功，敲 `exit` 退出容器。
 
+### 配置 Spring Boot 使用 MongoDB
+
+Spring 的应用一般通过外部配置文件，比如 `*.properties` 或者 `*.yml` 文件来对应用进行配置。 Spring 默认情况下寻找配置文件会依照以下顺序进行
+
+* 当前目录下的 `config` 文件夹
+* 当前目录
+* 位于 `classpath` 中的命名为 `config` 的包
+* `classpath` 的根路径。而一个典型的 web 应用的资源 classpath 是如下位置，所以一般我们习惯把 `*.properties` 或者 `*.yml` 放在 `src/main/resources` 目录下。
+  * `/META-INF/resources/`
+  * `/resources/`
+  * `/static/`
+  * `/public/`
+
+下面我们就在 `src/main/resources` 中建立一个 `application.yml` ，并在其中指定要连接的 MongoDB 的数据库名称。题外话，其实不指定这个数据库名称，Spring Boot 也可以正常启动并连接 MongoDB ，只不过这个时候连接的数据库默认是 `test` ，而这种方式在正式开发中我们是要避免的。
+
+`yml` 这种格式非常简单，是以缩进来表示层级关系，比如我们要给 `spring.data.mongodb.database` 这个属性设置为 `gtm-api` ，也就是设置数据库名称为 `gtm-api` ，就可以通过下面的 `yml` 完成。
+
+```yml
+# application.yml
+spring:
+  data:
+    mongodb:
+      database: gtm-api
+```
+
+这个数据库现在还是不存在的，但是当有第一次有写操作的时候，这个 `gtm-api` 会自动被建立。
+
 ### 改写 Task
 
 在我们刚刚的项目中集成 MongoDB 简单到令人发指，只需更改一下子项目 `api` 的 `build.gradle`，增加 2 个依赖：
@@ -213,7 +240,7 @@ public interface TaskRepo extends MongoRepository<Task, String> {
 
 这个接口非常简单，首先继承了 `MongoRepository` ,这样一个简单的继承的能量大到让你吃惊，常见的增、删、改、查包括分页、排序等等，完全不用写一行代码。
 
-而 `@RepositoryRestResource` 这个注解同样简单的一行给我们带来的仍然是超值的体验 -- 给我们的是同样的包括增删改查的 REST API ！
+而 `@RepositoryRestResource` 这个注解注意一下， `collectionResourceRel` 指定了集合资源的名称，怎么理解呢？好比说，我们现在要得到 `tasks` 的列表，访问 API 后返回的 `json` 中会有 `tasks: [...]` ，这个 `tasks` 就是我们在 `collectionResourceRel` 的值。如果我们改成 `collectionResourceRel = "todos"` ，那么返回的 json 中就变成了 `todos: [...]` 。而 `path` 指的是这个资源的相对路径， `path = "tasks"` 就会为这个 `respository` 生成一个 API 路径 `http://localhost:8080/tasks` 。
 
 看到这里你应该也知道了，`TaskController` 可以下岗了，因为有能力更强的人顶替了它的作用，那么我们就删掉 `TaskController.java`。然后先终止之前启动的应用，如果你在 `terminal` 中启动的就按 `CTRL-C`，如果是 IDE 那么就按停止按钮，然后重新启动应用。
 
@@ -431,9 +458,9 @@ public class SimpleMongoRepository<T, ID extends Serializable> implements MongoR
 
 虽然不想在具体类上继续研究，但我们还是应该多了解一些关于 `MongoRepository` 的东西。这个接口继承了 `PagingAndSortingRepository` （定义了排序和分页） 和 `QueryByExampleExecutor`。而 `PagingAndSortingRepository` 又继承了 `CrudRepository` （定义了增删改查等）。
 
-第二个魔法就是 `@RepositoryRestResource(collectionResourceRel = "tasks", path = "tasks")` 这个注解了，它直接对 MongoDB 中的集合（本例中的 task ）映射到了一个REST URI（tasks）。因此我们连 Controller 都没写就把 API 搞出来了，而且还是个 Hypermedia REST。
+第二个魔法就是它直接对 MongoDB 中的集合（本例中的 tasks ）映射到了一个REST URI（tasks）。因此我们连 Controller 都没写就把 API 搞出来了，而且还是个 Hypermedia REST。
 
-其实呢，这个第二个魔法只在你需要变更映射路径时需要。本例中如果我们不加 `@RepositoryRestResource` 这个注解的话，同样也可以生成 API，只不过其路径按照默认英语复数定义路径，也就是说如果我们不想按默认路径的话，指定这个注解可以自定义 API 路径，大家可以试试把这个注解去掉，然后重启服务，访问 `http://localhost:8080/tasks` 看看。
+其实呢，这个注解 `@RepositoryRestResource(collectionResourceRel = "tasks", path = "tasks")` 只在你有特殊需求的时候才需要，比如是否需要暴露这个 `repository` 到 REST 资源？是否需要重新定义这个资源的集合名称和单个名称（比如有时候某些单词的复数形式是特殊的，就需要指定一下 `collectionResourceRel` 和 `path` ）。本例中如果我们不加 `@RepositoryRestResource` 这个注解的话，同样也可以生成 API，只不过其路径按照默认英语复数定义路径，也就是说如果我们不想按默认路径的话，指定这个注解可以自定义 API 路径，大家可以试试把这个注解去掉，然后重启服务，访问 `http://localhost:8080/tasks` 看看。
 
 ### REST 的简单介绍
 
@@ -442,6 +469,25 @@ REST 简单来说可以理解成几个基本规则
 1. 以资源名称构成 API 路径，也就是定义资源尽量使用名词
 2. 以动词定义要对资源执行的操作，也就是使用不同的请求方法（GET/POST/PUT/DELETE 等)访问资源路径就代表着要对资源采用什么操作。一般 GET 表示查询， POST 代表新增，PUT 表示更改，而 DELETE 表示删除。
 3. 资源的复数形式表示列表，而列表后跟资源唯一标识表示取得具体列表中的某一资源。
+
+#### 几个例子
+
+比如 `/api/users` 代表了 `users` 这个资源，
+
+* 那么一般来说如果以 `GET` 方法访问 `/api/users` 表示要得到用户的列表。此处需要注意，列表路径是复数形式，如果没做特殊处理， Spring 会按照英语的语法给出复数形式。
+* 以 `POST` 方法访问 `/api/users` 表示要新增一个 `user` ，这个要新增的用户信息一般以 `json` 形式作为 `Request Body` 上传。
+* 那么如何得到某一个用户呢？使用 `GET` 方法访问 `/api/users/:id` ，比如如果用户 `ID` 是 `1` ，那么得到这个用户的 `URL` 是 `/api/users/1` 。
+* 对该用户的更新是通过 `PUT` 或 `PATCH` 方法访问 `/api/users/:id` 。同样的修改的信息以 `json` 形式作为 `Request Body` 上传。 `PUT` 和 `PATCH` 的区别在于 `PUT` 要求上传该对象的完整形式，而且更新也是全部进行更新。而 `PATCH` 是可以上传部分改变的信息，比 `PUT` 要节省传输带宽。
+* 删除用户当然也就是 `DELETE` 方法 `/api/users/:id` 。
+
+#### REST 的成熟度
+
+REST API 有一个 `Richardson Maturity Model` 的评价标准
+
+* Level 0 （Swamp of POX）：这一级其实一点都不符合 REST，所以是 `Level 0` ，也就是你使用了 HTTP 或者类似的协议，使用某一种 HTTP 方法，多数情况下是 `POST` 。
+* Level 1 （Resources）：这一级你开始定义资源，也就是说对于不同的资源，你有不同的 URL 标识，但仍是使用 HTTP 的某一种方法，多数情况是 POST
+* Level 2 （HTTP verbs）: 这一级除了资源的划分，你也要是用不同的方法实现不同的对资源的操作，比如 POST 代表新增，PUT 代表修改，DELETE 代表删除而 GET 表示查询。此外需要使用协议规定的响应码标识不同的状态，比如在出现错误时返回 `200` 就是一个错误用法。
+* Level 3 （Hypermedia controls）：这一级就是客户端可用自己发现我们的 API，我们上面做出的 `HATEOAS` 类型的 API 就是符合 Level 3 的。但很可惜的是在现实开发中，目前达到这一级别的团队很少。
 
 ## 让后端也能热更新
 

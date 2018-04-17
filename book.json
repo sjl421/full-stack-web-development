@@ -3,6 +3,67 @@
   "author": "王芃",
   "description": "Spring Boot 2.x 和 Angular 6.x 全栈技能打造效率工具",
   "language": "zh-hans",
-  "gitbook": ">=3.0.0",
-  "root": "."
+  "gitbook": ">=3.2.3",
+  "root": ".",
+  "plugins": [
+    "search-plus@^0.0.11",
+    "github@^2.0.0",
+    "katex@^1.1.4",
+    "mermaid-gb3@2.1.0",
+    "puml@^1.0.1",
+    "graph@^0.1.0",
+    "donate@^1.0.2",
+    "terminal@^0.3.2",
+    "-sharing",
+    "sharing-plus@^0.0.11"
+  ],
+  "pluginsConfig": {
+    "github": {
+      "url": "https://github.com/wpcfan"
+    },
+    "donate": {
+      "wechat": "https://zhangjikai.com/resource/weixin.png",
+      "alipay": "https://zhangjikai.com/resource/alipay.png",
+      "title": "",
+      "button": "赏",
+      "alipayText": "支付宝打赏",
+      "wechatText": "微信打赏"
+    },
+    "terminal": {
+      "copyButtons": true,
+      "fade": false,
+      "style": "flat"
+    },
+    "sharing": {
+      "douban": false,
+      "facebook": false,
+      "google": true,
+      "hatenaBookmark": false,
+      "instapaper": false,
+      "line": false,
+      "linkedin": true,
+      "messenger": false,
+      "pocket": false,
+      "qq": false,
+      "qzone": false,
+      "stumbleupon": false,
+      "twitter": false,
+      "viber": false,
+      "vk": false,
+      "weibo": true,
+      "whatsapp": false,
+      "all": [
+        "facebook",
+        "google",
+        "twitter",
+        "weibo",
+        "instapaper",
+        "linkedin",
+        "pocket",
+        "stumbleupon",
+        "qq",
+        "qzone"
+      ]
+    }
+  }
 }

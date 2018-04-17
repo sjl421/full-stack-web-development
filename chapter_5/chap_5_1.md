@@ -1,745 +1,644 @@
-# 构建安全的 API 接口
+# HyperMedia API vs 传统 API
 
-## 为什么要保护 API？
+## 领域对象
 
-通常情况下，把 API 直接暴露出去是风险很大的，不说别的，直接被机器攻击就喝一壶的。那么一般来说，对 API 要划分出一定的权限级别，然后做一个用户的鉴权，依据鉴权结果给予用户开放对应的 API 。目前，比较主流的方案有几种:
-
- 1. 用户名和密码鉴权，使用 Session 保存用户鉴权结果。
- 2. 自行采用 `token` 进行鉴权，自己设计的 `token` 往往由于设计时没有考虑周全，后期存在各种兼容性问题。
- 3. 使用 `OAuth`/`OAuth2` 进行鉴权（其实 `OAuth` 也是一种基于 `token` 的鉴权，只是没有规定 `token` 的生成方式）
- 4. 使用 `JWT` 作为 `token`
-
-第一种就不介绍了，由于依赖 `Session` 来维护状态，也不太适合移动时代，新的项目就不要采用了。第二种的兼容性和可维护性较差而 `OAuth` 其实对于不做开放平台的公司有些过于复杂。我们主要介绍第四种：`JWT` 。
-
-## 什么是JWT？
-
-下面是一个 JWT 的工作流程图。模拟一下实际的流程是这样的（假设受保护的 API 在`/protected`中）
-
- 1. 用户导航到登录页，输入用户名、密码，进行登录
- 2. 服务器验证登录鉴权，如果改用户合法，根据用户的信息和服务器的规则生成 `JWT token`
- 3. 服务器将该 `token` 以 json 形式返回（其实不一定要 json 形式，这里说的是一种常见的做法）
- 4. 用户得到 token，存在 localStorage、cookie、IndexDB 或其它数据存储形式中。
- 5. 以后用户请求`/protected`中的 API 时，在请求的 header 中加入 `Authorization: Bearer xxxx(token)` 。此处注意 token 之前有一个 7 字符长度的 `Bearer`，注意 `Bearer` 后应该有一个空格。
- 6. 服务器端对此 token 进行检验，如果合法就解析其中内容，根据其拥有的权限和自己的业务逻辑给出对应的响应结果。
- 7. 用户取得结果
-
-![JWT工作流程图](/assets/2018-04-09-17-48-56.png)
-
-为了更好的理解这个token是什么，我们先来看一个token生成后的样子，下面那坨乱糟糟的就是了。
-
-```txt
-eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJ3YW5nIiwiY3JlYXRlZCI6MTQ4OTA3OTk4MTM5MywiZXhwIjoxNDg5Njg0NzgxfQ.RC-BYCe_UZ2URtWddUpWXIp4NMsoeq2O6UF-8tVplqXY1-CI9u1-a-9DAAJGfNWkHE81mpnR3gXzfrBAB3WUAg
-```
-
-但仔细看到的话还是可以看到这个 `token` 分成了三部分，每部分用 `.` 分隔，每段都是用 `Base64` 编码的。如果我们用一个Base64的解码器的话  <https://www.base64decode.org> ，可以看到第一部分 `eyJhbGciOiJIUzUxMiJ9` 被解析成了:
-
-```json
-{
-    "alg":"HS512"
-}
-```
-
-这是告诉我们HMAC采用HS512算法对JWT进行的签名。
-
-第二部分 `eyJzdWIiOiJ3YW5nIiwiY3JlYXRlZCI6MTQ4OTA3OTk4MTM5MywiZXhwIjoxNDg5Njg0NzgxfQ` 被解码之后是
-
-```json
-{
-    "sub":"wang",
-    "created":1489079981393,
-    "exp":1489684781
-}
-
-```
-
-这段告诉我们这个 `token` 中含有的数据声明（ `Claim` ），这个例子里面有三个声明：`sub`, `created` 和 `exp`。在我们这个例子中，分别代表着用户名、创建时间和过期时间，当然你可以把任意数据声明在这里。
-
-看到这里，你可能会想这是个什么鬼 `token` ，所有信息都透明啊，安全怎么保障？别急，我们看看 `token` 的第三段  `RC-BYCe_UZ2URtWddUpWXIp4NMsoeq2O6UF-8tVplqXY1-CI9u1-a-9DAAJGfNWkHE81mpnR3gXzfrBAB3WUAg` 。同样使用 Base64 解码之后，咦，这是什么东东
-
-```txt
-D X	DmYTeȧLUZcPZ0$gZAY_7wY@
-```
-
-最后一段其实是签名，这个签名必须知道秘钥才能计算。这个也是 `JWT` 的安全保障。这里提一点注意事项，由于数据声明（ `Claim` ）是公开的，千万不要把密码等敏感字段放进去，否则就等于是公开给别人了。
-
-也就是说JWT是由三段组成的，按官方的叫法分别是 `header` （头）、 `payload` （负载）和 `signature` （签名）：
-
-```txt
-header.payload.signature
-```
-
-头中的数据通常包含两部分：一个是我们刚刚看到的 `alg`，这个词是 `algorithm` 的缩写，就是指明算法。另一个可以添加的字段是 `token` 的类型(按 `RFC 7519` 实现的 `token` 机制可不只 JWT 一种)，但如果我们采用的是 `JWT` 的话，指定这个就多余了。
-
-```json
-{
-  "alg": "HS512",
-  "typ": "JWT"
-}
-```
-
-`payload` 中可以放置三类数据：系统保留的、公共的和私有的：
-
-* 系统保留的声明（ `Reserved claims` ）：这类声明不是必须的，但是是建议使用的，包括： `iss` (签发者), `exp` (过期时间), `sub` (主题), `aud` (目标受众)等。这里我们发现都用的缩写的三个字符，这是由于 `JWT` 的目标就是尽可能小巧。
-* 公共声明：这类声明需要在 IANA JSON Web Token Registry 中定义或者提供一个 URI ，因为要避免重名等冲突。
-* 私有声明：这个就是你根据业务需要自己定义的数据了。
-
-签名的过程是这样的：采用 `header` 中声明的算法，接受三个参数： `base64` 编码的 `header` 、 `base64` 编码的 `payload` 和秘钥（ `secret` ）进行运算。签名这一部分如果你愿意的话，可以采用 `RSASHA256` 的方式进行公钥、私钥对的方式进行，如果安全性要求的高的话。
-
-```txt
-HMACSHA256(
-  base64UrlEncode(header) + "." +
-  base64UrlEncode(payload),
-  secret)
-```
-
-## JWT的生成和解析
-
-为了简化我们的工作，这里引入一个比较成熟的JWT类库，叫 `jjwt` <https://github.com/jwtk/jjwt> 。这个类库可以用于Java和Android的JWT token的生成和验证。
-
-`JWT` 的生成可以使用下面这样的代码完成：
+和前面前端类似，我们在后端也需要定义领域对象。而且从某种角度说，后端的领域对象往往也影响前端的建模。既然是登录鉴权，那么我们肯定要建立一个 `User` 对象。这个和前端的模型很类似，没什么好说的。
 
 ```java
-String generateToken(Map<String, Object> claims) {
-    return Jwts.builder()
-            .setClaims(claims)
-            .setExpiration(generateExpirationDate())
-            .signWith(SignatureAlgorithm.HS512, secret) //采用什么算法是可以自己选择的，不一定非要采用HS512
-            .compact();
-}
-```
-
-数据声明（ `Claim` ）其实就是一个 `Map` ，比如我们想放入用户名，可以简单的创建一个 `Map` 然后 `put` 进去就可以了。
-
-```java
-Map<String, Object> claims = new HashMap<>();
-claims.put(CLAIM_KEY_USERNAME, username());
-```
-
-解析也很简单，利用 `jjwt` 提供的 parser 传入秘钥，然后就可以解析 `token` 了。
-
-```java
-Claims getClaimsFromToken(String token) {
-    Claims claims;
-    try {
-        claims = Jwts.parser()
-                .setSigningKey(secret)
-                .parseClaimsJws(token)
-                .getBody();
-    } catch (Exception e) {
-        claims = null;
-    }
-    return claims;
-}
-```
-
-`JWT` 本身没啥难度，但安全整体是一个比较复杂的事情， `JWT` 只不过提供了一种基于 `token` 的请求验证机制。但我们的用户权限，对于 API 的权限划分、资源的权限划分，用户的验证等等都不是 `JWT` 负责的。也就是说，请求验证后，你是否有权限看对应的内容是由你的用户角色决定的。所以我们这里要利用 `Spring` 的一个子项目 `Spring Security` 来简化我们的工作。
-
-## 使用 Spring Security 规划角色安全
-
-Spring Security 是一个基于 Spring 的通用安全框架，里面内容太多了，本文的主要目的也不是展开讲这个框架，而是如何利用 Spring Security 和 JWT 一起来完成 API 保护。所以关于 Spring Secruity 的基础内容或展开内容，请自行去官网学习<http://projects.spring.io/spring-security> 。
-
-## 背景知识
-
-如果你的系统有用户的概念的话，一般来说，你应该有一个用户表，最简单的用户表，应该有三列：Id ，Username 和 Password ，类似下表这种
-
-| ID | USERNAME | PASSWORD
-|----|----------|----------
-| 10 | wang | abcdefg
-
-而且不是所有用户都是一种角色，比如网站管理员、供应商、财务等等，这些角色和网站的直接用户需要的权限可能是不一样的。那么我们就需要一个角色表：
-
-| ID | ROLE
-|----|------
-| 10 | USER
-| 20 | ADMIN
-
-当然我们还需要一个可以将用户和角色关联起来建立映射关系的表。
-
-| USER_ID | ROLE_ID
-|----|------
-| 10 | 10
-| 20 | 20
-
-这是典型的一个关系型数据库的用户角色的设计，由于我们要使用的MongoDB是一个文档型数据库，所以让我们重新审视一下这个结构。
-
-这个数据结构的优点在于它避免了数据的冗余，每个表负责自己的数据，通过关联表进行关系的描述，同时也保证的数据的完整性：比如当你修改角色名称后，没有脏数据的产生。
-
-但是这种事情在用户权限这个领域发生的频率到底有多少呢？有多少人每天不停的改的角色名称？当然如果你的业务场景确实是需要保证数据完整性，你还是应该使用关系型数据库。但如果没有高频的对于角色表的改动，其实我们是不需要这样的一个设计的。在 MongoDB 中我们可以将其简化为
-
-```json
-{
-  _id: <id_generated>
-  username: 'user',
-  password: 'pass',
-  roles: ['USER', 'ADMIN']
-}
-```
-
-基于以上考虑，我们重构一下 `User` 类，
-
-```java
-@Data
 public class User {
+    private String username;
+    private String password;
+    private String mobile;
+    private String name;
+    private String email;
+    private Gender gender;
+    private String avatar;
+}
+```
+
+上面这个类定义完成了吗？没有，在 Java 中有一个很烦的地方就是要写好多 `getter` 和 `setter` ，还有构造函数、 `hashCode` , `equals` 和 `toString` 等方法，当然其实现代 IDE 都提供了一些快捷方式生成。但是还是有些麻烦，最重要的是，这些方法在查找问题、分析代码和评审代码时会分散注意力。有没有什么方法可以让我们从这些模式化代码中解脱出来呢？有，那就是 Java 社区大名鼎鼎的 `lombok` ，可以访问其官网 <https://projectlombok.org> 了解更多特性的详情。
+
+### 使用 Lombok 简化模式化代码的编写
+
+#### 配置 Lombok
+
+在 `api/build.gradle` 中，加入 `lombok` 的依赖， `lombok` 也提供了 Spring Boot 的支持，所以不用写版本号。
+
+```groovy
+apply plugin: 'org.springframework.boot'
+
+dependencies {
+    implementation("org.springframework.boot:spring-boot-devtools")
+    implementation("org.projectlombok:lombok")
+    implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.boot:spring-boot-starter-data-rest")
+    implementation("org.springframework.boot:spring-boot-starter-data-mongodb")
+    implementation("org.springframework.data:spring-data-rest-hal-browser")
+}
+```
+
+然后在 IDEA 中的 `Preference > Build, Execution, Deployment > Complier > Annotation Processors` ，选中 `Enable annotation processors` 然后点击 OK 。
+
+![在 IDEA 启用 Annotation Processors](/assets/2018-04-11-15-35-34.png)
+
+这样就完成了 Lombok 的设置，下面我们就简单的了解一下 Lombok 可以给我带来哪些魔法。
+
+#### 大杀器 @Data
+
+Lombok 提供了很多注解，但其中最常被使用的就是这个 `@Data` 了 <https://projectlombok.org/features/Data> ，只需放一个注解在类前面，一切烦恼就都消失了，可谓居家旅行必备良药。这么一个注解会帮你生成所有属性的 `get` 和 `set` 方法 （ `final` 属性只生成 `get` 方法），帮你实现 `hashCode` , `equals` 和 `toString` 方法以及由必选参数（就是所有 `final` 属性以及 标识 `@NonNull` 注解的属性）构成的构造函数。
+
+最棒的是，这些魔法是在编译时完成的，和 IDE 帮你自动生成的代码不同，你的源文件中永远都不会出现这些冗长的代码，一直就是这种短小精悍的形式，这对于开发者实在是太友好了。
+
+```java
+package dev.local.gtm.api.domain;
+
+import dev.local.gtm.api.domain.enums.Gender;
+import lombok.Data;
+
+@Data // <----------这里
+public class User {
+    private String username;
+    private String password;
+    private String mobile;
+    private String name;
+    private String email;
+    private Gender gender;
+    private String avatar;
+}
+```
+
+#### @Builder 让对象创建无烦恼
+
+这个注解也是笔者挚爱之一，在介绍它之前，我们先来看一段代码。
+
+```java
+User newUser = new User();
+newUser.setUsername(userDTO.getUsername());
+newUser.setPassword(encryptedPassword);
+newUser.setFirstName(userDTO.getFirstName());
+newUser.setLastName(userDTO.getLastName());
+newUser.setEmail(userDTO.getEmail());
+newUser.setImageUrl(userDTO.getImageUrl());
+newUser.setLangKey(userDTO.getLangKey());
+newUser.setActivated(false);
+```
+
+是不是有种很熟悉的感觉，先 `new` 出来对象，然后一列齐刷刷的 `newUser.setXXX` 个人感觉是很干扰阅读的，而且在设置属性的时候，重新敲 `newUser.setXXX` 总有思路被打断的感觉。现代 API 写法中越来越多的使用了 Builder 模式，那么 Lombok 的注解 @Builder 又帮你省去了手写的工作量，可以优雅的写 Builder 模式的代码，何乐而不为呢？
+
+```java
+User.builder()
+  .username(userDTO.getUsername())
+  .password(encryptedPassword)
+  .firstName(userDTO.getFirstName())
+  .lastName(userDTO.getLastName())
+  .email(userDTO.getEmail())
+  .imageUrl(userDTO.getImageUrl())
+  .langKey(userDTO.getLangKey())
+  .activated(false)
+  .build();
+```
+
+此外和 `@Builder` 经常在一起使用的有 `@Singular` ，这个注解标识类中的集合属性，为集合属性生成添加单个元素和集合元素以及清空集合的方法。详细情况可以参考官网的解释 <https://projectlombok.org/features/Builder> 。
+
+#### 别烦我了 try...finally
+
+Java 的异常处理当然是很强大的，但是当你遇到下面这种情况，是不是也会觉得生无可恋啊？
+
+```java
+import java.io.*;
+
+public class CleanupExample {
+  public static void main(String[] args) throws IOException {
+    InputStream in = new FileInputStream(args[0]);
+    try {
+      OutputStream out = new FileOutputStream(args[1]);
+      try {
+        byte[] b = new byte[10000];
+        while (true) {
+          int r = in.read(b);
+          if (r == -1) break;
+          out.write(b, 0, r);
+        }
+      } finally {
+        if (out != null) {
+          out.close();
+        }
+      }
+    } finally {
+      if (in != null) {
+        in.close();
+      }
+    }
+  }
+}
+```
+
+Lombok 可以让你这样写，世界顿时清净了吧，有木有？
+
+```java
+import lombok.Cleanup;
+import java.io.*;
+
+public class CleanupExample {
+  public static void main(String[] args) throws IOException {
+    @Cleanup InputStream in = new FileInputStream(args[0]);
+    @Cleanup OutputStream out = new FileOutputStream(args[1]);
+    byte[] b = new byte[10000];
+    while (true) {
+      int r = in.read(b);
+      if (r == -1) break;
+      out.write(b, 0, r);
+    }
+  }
+}
+```
+
+#### 其他几个常用注解
+
+除去上面的几个注解，还有一些我们在本书中会用到的一些 Lombok 提供的工具，它们没有那么强大的功能，但同样会给你带来生产效率的提升。
+
+* `val` 和 `var` -- 用过 swift 或 kotlin 的读者肯定知道 `val` 和 `var` ，前者是不可变对象，后者是可变对象。有了 Lombok ，你就在 Java 中也可以这么使用了 `val example = new ArrayList<String>();` ，而不用写成 `final ArrayList<String> example = new ArrayList<String>();` 。 `var` 就不举例了，除了对象可变之外，其他和 `val` 一样。
+* `@Log` 、 `@Slf4j` 、 `@Log4j`、 `@CommonsLog` 等等 -- 写日志是我们在编程中经常遇到的，Lombok 提供的这个注解在类上标注后，直接程序中写 `log.error()` 等走起。
+
+### 使用 Lombok 改造领域对象
+
+工具介绍完毕，我们回到领域对象中，使用 Lombok 来改造领域对象 `User`。
+
+```java
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import dev.local.gtm.api.config.Constants;
+import lombok.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Field;
+
+import javax.validation.constraints.Email;
+import javax.validation.constraints.NotNull;
+import javax.validation.constraints.Pattern;
+import javax.validation.constraints.Size;
+import java.io.Serializable;
+import java.time.Instant;
+
+@Getter
+@Setter
+@EqualsAndHashCode(of = "id")
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class User implements Serializable {
+    private static final long serialVersionUID = 1L;
+
     @Id
     private String id;
 
-    @Indexed(unique=true, direction= IndexDirection.DESCENDING, dropDups=true)
-    private String username;
+    @NotNull
+    @Pattern(regexp = Constants.LOGIN_REGEX)
+    @Size(min = 1, max = 50)
+    @Indexed
+    private String login;
 
+    @JsonIgnore
+    @NotNull
+    @Size(min = 60, max = 60)
     private String password;
+
+    @NotNull
+    @Pattern(regexp = Constants.MOBILE_REGEX)
+    @Size(min = 10, max = 15)
+    private String mobile;
+
+    @Size(max = 50)
+    private String name;
+
+    @Email
+    @Size(min = 5, max = 254)
+    @Indexed
     private String email;
-    private Date lastPasswordResetDate;
-    private List<String> roles;
+
+    @Size(max = 256)
+    private String avatar;
+
+    @Builder.Default
+    private boolean activated = false;
 }
 ```
 
-当然你可能发现这个类有点怪，只有一些 `field` ，这个简化的能力是一个叫 `lombok` 类库提供的 ，这个很多开发过Android 的童鞋应该熟悉，是用来简化 POJO 的创建的一个类库。简单说一下，采用 `lombok` 提供的 `@Data` 修饰符后可以简写成，原来的一坨 getter 和 setter 以及constructor 等都不需要写了。类似的 `Todo` 可以改写成：
+这样看起来一个领域对象的代码就清晰多了。比起之前的 `User` ，我们添加了一些字段的约束，比如 `@NotNull` 、 `@Pattern` 、 `@Size` 、 `@Email` 这些都属于 `JSR 380 Java Bean Validation` 提供的注解，用以确保属性满足指定条件。而且这些注解还可以和 Java 8 的 `Optional` 连用：
 
 ```java
-@Data
-public class Todo {
-    @Id private String id;
-    private String desc;
-    private boolean completed;
-    private User user;
+private LocalDate dateOfBirth;
+
+public Optional<@Past LocalDate> getDateOfBirth() {
+    return Optional.of(dateOfBirth);
 }
 ```
 
-增加这个类库只需在 `build.gradle` 中增加下面这行
+而 `@Indexed` 属于 Spring Data MongoDB 提供的注解，这个注解顾名思义就是建立索引，查看索引的话，可以登录到 MongoDB 的容器中，使用 MongoDB 的客户端命令进行操作。当然这个索引目前还不是程序规定的样子，直到有数据写入时索引会自动创建。
 
-```gradle
-dependencies {
-  // 省略其它依赖
-  implementation("org.projectlombok:lombok:${lombokVersion}")
+```bash
+## 先登录到容器
+docker exec -it [容器名称] bash
+## 然后进入 MongoDB 的客户端
+mongo
+## 输入下面的命令查看索引
+db.user.getIndexes()
+```
+
+对于使用的 Lombok 注解，需要指出 `@Builder.Default` 这个注解是如果在有属性的默认值时，同时又使用了 `@Builder` 的情况下，用来标记有默认值的那个属性。再有就是我们没有使用 `@Data` 的原因是，对于用户的 `equals` 和 `hashCode` 两个方法，我们不想比较所有字段，其实只需比较 `id` 即可，而 `@Data` 默认是全部比较的。指定哪些属性参与到 `equals` 和 `hashCode` 方法中的比较，可以使用 `@EqualsAndHashCode(of = {"属性1", "属性2", ...})` 来去实现。
+
+## API 的可见控制
+
+有细心的同学可能发现了，之前我们的 API 默认暴露了 `repository` 中支持的全部接口。如果启动服务，使用浏览器访问 `http://localhost:8080` 进入 `HAL Browser` ，在 `Explorer` 的下方输入框内输入 `/profile/users` 点击 `Go!` 可以看到 Response Body 中返回的 `json` 。
+
+```json
+{
+  "alps": {
+    "version": "1.0",
+    "descriptors": [
+      // 省略其他部分
+      {
+        "id": "create-users",
+        "name": "users",
+        "type": "UNSAFE",
+        "rt": "#user-representation"
+      },
+      {
+        "id": "get-user",
+        "name": "user",
+        "type": "SAFE",
+        "rt": "#user-representation"
+      },
+      {
+        "id": "update-user",
+        "name": "user",
+        "type": "IDEMPOTENT",
+        "rt": "#user-representation"
+      },
+      {
+        "id": "patch-user",
+        "name": "user",
+        "type": "UNSAFE",
+        "rt": "#user-representation"
+      },
+      {
+        "id": "delete-user",
+        "name": "user",
+        "type": "IDEMPOTENT",
+        "rt": "#user-representation"
+      }
+    ]
+  }
 }
 ```
 
-## 在 SpringBoot 中启用 Spring Security
+从上面的 json 中，可以看到我们暴露了增、删、改、查等操作，大家可以通过 Postman 进行验证，所有的操作都是允许的。 那么问题来了，很多时候我们只想开放某些接口，比如只开放只读接口，不允许写操作。这种情况下怎么办呢？答案非常简单，还是采用注解，但是需要配合适当的策略。
 
-要在 Spring Boot 中引入 Spring Security 非常简单，修改 `build.gradle`，增加一个引用 `org.springframework.boot:spring-boot-starter-security`：
+Spring Data Rest 使用 `RepositoryDetectionStrategy` 来决定一个 `repository` 是否作为 Rest 资源暴露出去。需要指出的是 `RepositoryDetectionStrategy` 只决定 API 的外部可见策略，并不涉及权限，也就是说能看到不代表能执行。
 
-```gradle
-dependencies {
-  implementation("org.springframework.boot:spring-boot-starter-data-rest")
-  implementation("org.springframework.boot:spring-boot-starter-data-mongodb")
-  implementation("org.springframework.boot:spring-boot-starter-security")
-  implementation("io.jsonwebtoken:jjwt:${jjwtVersion}")
-  implementation("org.projectlombok:lombok:${lombokVersion}")
-  testImplementation("org.springframework.boot:spring-boot-starter-test")
-}
-```
+* `DEFAULT` -- 默认情况下会把所有的 `public` 的 `respository` 接口暴露成 Rest 资源。但是仍然会尊重 `@RepositoryRestResource` 或 `@RestResource` 的 `exported` 标志位。也就是说，比如某个 `TaskRepo` ，我们加上这个注解 `@RepositoryRestResource(collectionResourceRel = "tasks", path = "tasks", exported = false)` ，那么我们在访问 `http://localhost:8080/api` 时将不会把 `api/tasks` 列出。
+* `ALL` -- 暴露所有 `repository` 的接口方法
+* `ANNOTATION` -- 只有添加了注解 `@RepositoryRestResource` 和 `@RestResource` 的 `repository` 方法会暴露。但仍会尊重 `exported` 标志位，也就是说如果 `exported = false` ，那么就不暴露该资源。
+* `VISIBILITY` -- 只暴露 `public` 的添加了注解 `@RepositoryRestResource` 的 `repository` 接口。
 
-你可能发现了，我们不只增加了对Spring Security的编译依赖，还增加 `jjwt` 的依赖。
-
-Spring Security 需要我们实现几个东西，第一个是 `UserDetails` ：这个接口中规定了用户的几个必须要有的方法，所以我们创建一个 `JwtUser` 类来实现这个接口。为什么不直接使用 `User` 类？因为这个 `UserDetails` 完全是为了安全服务的，它和我们的领域类可能有部分属性重叠，但很多的接口其实是安全定制的，所以最好新建一个类：
+这个策略的配置，有几个方法可以选择，其一是建立一个配置类
 
 ```java
-public class JwtUser implements UserDetails {
-    private final String id;
-    private final String username;
-    private final String password;
-    private final String email;
-    private final Collection<? extends GrantedAuthority> authorities;
-    private final Date lastPasswordResetDate;
+package dev.local.gtm.api.config;
 
-    public JwtUser(
-            String id,
-            String username,
-            String password,
-            String email,
-            Collection<? extends GrantedAuthority> authorities,
-            Date lastPasswordResetDate) {
-        this.id = id;
-        this.username = username;
-        this.password = password;
-        this.email = email;
-        this.authorities = authorities;
-        this.lastPasswordResetDate = lastPasswordResetDate;
-    }
-    //返回分配给用户的角色列表
-    @Override
-    public Collection<? extends GrantedAuthority> getAuthorities() {
-        return authorities;
-    }
+import org.springframework.context.annotation.Configuration;
+import org.springframework.data.rest.core.config.RepositoryRestConfiguration;
+import org.springframework.data.rest.core.mapping.RepositoryDetectionStrategy;
+import org.springframework.data.rest.webmvc.config.RepositoryRestConfigurerAdapter;
 
-    @JsonIgnore
-    public String getId() {
-        return id;
-    }
-
-    @JsonIgnore
-    @Override
-    public String getPassword() {
-        return password;
-    }
-
-    @Override
-    public String getUsername() {
-        return username;
-    }
-    // 账户是否未过期
-    @JsonIgnore
-    @Override
-    public boolean isAccountNonExpired() {
-        return true;
-    }
-    // 账户是否未锁定
-    @JsonIgnore
-    @Override
-    public boolean isAccountNonLocked() {
-        return true;
-    }
-    // 密码是否未过期
-    @JsonIgnore
-    @Override
-    public boolean isCredentialsNonExpired() {
-        return true;
-    }
-    // 账户是否激活
-    @JsonIgnore
-    @Override
-    public boolean isEnabled() {
-        return true;
-    }
-    // 这个是自定义的，返回上次密码重置日期
-    @JsonIgnore
-    public Date getLastPasswordResetDate() {
-        return lastPasswordResetDate;
-    }
-}
-```
-
-这个接口中规定的很多方法我们都简单粗暴的设成直接返回某个值了，这是为了简单起见，你在实际开发环境中还是要根据具体业务调整。当然由于两个类还是有一定关系的，为了写起来简单，我们写一个工厂类来由领域对象创建 `JwtUser`，这个工厂就叫 `JwtUserFactory` 吧：
-
-```java
-public final class JwtUserFactory {
-
-    private JwtUserFactory() {
-    }
-
-    public static JwtUser create(User user) {
-        return new JwtUser(
-                user.getId(),
-                user.getUsername(),
-                user.getPassword(),
-                user.getEmail(),
-                mapToGrantedAuthorities(user.getRoles()),
-                user.getLastPasswordResetDate()
-        );
-    }
-
-    private static List<GrantedAuthority> mapToGrantedAuthorities(List<String> authorities) {
-        return authorities.stream()
-                .map(SimpleGrantedAuthority::new)
-                .collect(Collectors.toList());
-    }
-}
-```
-
-第二个要实现的是 `UserDetailsService`，这个接口只定义了一个方法 `loadUserByUsername`，顾名思义，就是提供一种从用户名可以查到用户并返回的方法。注意，不一定是数据库哦，文本文件、xml文件等等都可能成为数据源，这也是为什么 Spring 提供这样一个接口的原因：保证你可以采用灵活的数据源。接下来我们建立一个 `JwtUserDetailsServiceImpl` 来实现这个接口。
-
-```java
-@Service
-public class JwtUserDetailsServiceImpl implements UserDetailsService {
-    @Autowired
-    private UserRepository userRepository;
-
-    @Override
-    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        User user = userRepository.findByUsername(username);
-
-        if (user == null) {
-            throw new UsernameNotFoundException(String.format("No user found with username '%s'.", username));
-        } else {
-            return JwtUserFactory.create(user);
-        }
-    }
-}
-
-```
-
-为了让 Spring 可以知道我们想怎样控制安全性，我们还需要建立一个安全配置类 `WebSecurityConfig`：
-
-```java
 @Configuration
-@EnableWebSecurity
-@EnableGlobalMethodSecurity(prePostEnabled = true)
-public class WebSecurityConfig extends WebSecurityConfigurerAdapter{
-
-    // Spring会自动寻找同样类型的具体类注入，这里就是JwtUserDetailsServiceImpl了
-    @Autowired
-    private UserDetailsService userDetailsService;
-
-    @Autowired
-    public void configureAuthentication(AuthenticationManagerBuilder authenticationManagerBuilder) throws Exception {
-        authenticationManagerBuilder
-                // 设置UserDetailsService
-                .userDetailsService(this.userDetailsService)
-                // 使用BCrypt进行密码的hash
-                .passwordEncoder(passwordEncoder());
-    }
-    // 装载BCrypt密码编码器
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
-    }
-
+public class SpringRestConfiguration extends RepositoryRestConfigurerAdapter {
     @Override
-    protected void configure(HttpSecurity httpSecurity) throws Exception {
-        httpSecurity
-                // 由于使用的是JWT，我们这里不需要csrf
-                .csrf().disable()
-
-                // 基于token，所以不需要session
-                .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS).and()
-
-                .authorizeRequests()
-                //.antMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-
-                // 允许对于网站静态资源的无授权访问
-                .antMatchers(
-                        HttpMethod.GET,
-                        "/",
-                        "/*.html",
-                        "/favicon.ico",
-                        "/**/*.html",
-                        "/**/*.css",
-                        "/**/*.js"
-                ).permitAll()
-                // 对于获取token的rest api要允许匿名访问
-                .antMatchers("/auth/**").permitAll()
-                // 除上面外的所有请求全部需要鉴权认证
-                .anyRequest().authenticated();
-
-        // 禁用缓存
-        httpSecurity.headers().cacheControl();
+    public void configureRepositoryRestConfiguration(RepositoryRestConfiguration config) {
+        config.setRepositoryDetectionStrategy(RepositoryDetectionStrategy.RepositoryDetectionStrategies.DEFAULT);
     }
 }
 ```
 
-接下来我们要规定一下哪些资源需要什么样的角色可以访问了，在 `UserController` 加一个修饰符 `@PreAuthorize("hasRole('ADMIN')")` 表示这个资源只能被拥有 `ADMIN` 角色的用户访问。
-
-```java
-/**
- * 在 @PreAuthorize 中我们可以利用内建的 SPEL 表达式：比如 'hasRole()' 来决定哪些用户有权访问。
- * 需注意的一点是 hasRole 表达式认为每个角色名字前都有一个前缀 'ROLE_'。所以这里的 'ADMIN' 其实在
- * 数据库中存储的是 'ROLE_ADMIN' 。这个 @PreAuthorize 可以修饰Controller也可修饰Controller中的方法。
- **/
-@RestController
-@RequestMapping("/users")
-@PreAuthorize("hasRole('ADMIN')")
-public class UserController {
-    @Autowired
-    private UserRepository repository;
-
-    @RequestMapping(method = RequestMethod.GET)
-    public List<User> getUsers() {
-        return repository.findAll();
-    }
-
-    // 略去其它部分
-}
-```
-
-类似的我们给 `TodoController` 加上  `@PreAuthorize("hasRole('USER')")` ，标明这个资源只能被拥有 `USER` 角色的用户访问：
-
-```java
-@RestController
-@RequestMapping("/todos")
-@PreAuthorize("hasRole('USER')")
-public class TodoController {
-    // 略去
-}
-```
-
-现在应该 Spring Security 可以工作了，但为了可以更清晰的看到工作日志，我们希望配置一下，在和 `src` 同级建立一个 `config` 文件夹，在这个文件夹下面新建一个 `application.yml`。
+另一种推荐做法是通过配置文件，比如 `application.yml` 或 `application.properties` 来实现，如果没有复杂的自定义配置，推荐这种方式，因为更简单。
 
 ```yml
-# Server configuration
-server:
-  port: 8090
-  contextPath:
-
-# Spring configuration
+# application.yml
 spring:
-  jackson:
-    serialization:
-      INDENT_OUTPUT: true
-  data.mongodb:
-    host: localhost
-    port: 27017
-    database: springboot
-
-# Logging configuration
-logging:
-  level:
-    org.springframework:
-      data: DEBUG
-      security: DEBUG
-
+  # 省略其他部分
+  data:
+    rest:
+      detection-strategy: default
 ```
 
-我们除了配置了logging的一些东东外，也顺手设置了数据库和http服务的一些配置项，现在我们的服务器会在8090端口监听，而spring data和security的日志在debug模式下会输出到console。
+### DEFAULT 默认策略
 
-现在启动服务后，访问 `http://localhost:8090` 你可以看到根目录还是正常显示的
-
-![根目录还是正常可以访问的][37]
-
-但我们试一下 `http://localhost:8090/users` ，观察一下console，我们会看到如下的输出，告诉由于用户未鉴权，我们访问被拒绝了。
-
-```txt
-2017-03-10 15:51:53.351 DEBUG 57599 --- [nio-8090-exec-4] o.s.s.w.a.ExceptionTranslationFilter     : Access is denied (user is anonymous); redirecting to authentication entry point
-
-org.springframework.security.access.AccessDeniedException: Access is denied
-    at org.springframework.security.access.vote.AffirmativeBased.decide(AffirmativeBased.java:84) ~[spring-securiåty-core-4.2.1.RELEASE.jar:4.2.1.RELEASE]
-```
-
-## 集成 JWT 和 Spring Securtiy
-
-到现在，我们还是让 JWT 和 Spring Security 各自为战，并没有集成起来。要想要 JWT 在 Spring 中工作，我们应该新建一个 `filter` ，并把它配置在 `WebSecurityConfig` 中。
+我们先来看一下 `default` 策略，首先把 `UserRepo` 改造成下面的样子，我们显式的给增、删、改等操作加上了注解 `@RestResource(exported = false)` ，就是说不想暴露成 Rest 资源。
 
 ```java
-@Component
-public class JwtAuthenticationTokenFilter extends OncePerRequestFilter {
+@Repository
+public interface UserRepo extends MongoRepository<User, String> {
 
-    @Autowired
-    private UserDetailsService userDetailsService;
 
-    @Autowired
-    private JwtTokenUtil jwtTokenUtil;
-
-    @Value("${jwt.header}")
-    private String tokenHeader;
-
-    @Value("${jwt.tokenHead}")
-    private String tokenHead;
+    @RestResource(exported = false)
+    @Override
+    <S extends User> S insert(S entity);
 
     @Override
-    protected void doFilterInternal(
-            HttpServletRequest request,
-            HttpServletResponse response,
-            FilterChain chain) throws ServletException, IOException {
-        String authHeader = request.getHeader(this.tokenHeader);
-        if (authHeader != null && authHeader.startsWith(tokenHead)) {
-            final String authToken = authHeader.substring(tokenHead.length()); // The part after "Bearer "
-            String username = jwtTokenUtil.getUsernameFromToken(authToken);
+    Page<User> findAll(Pageable pageable);
 
-            logger.info("checking authentication " + username);
+    @RestResource(exported = false)
+    @Override
+    <S extends User> S save(S entity);
 
-            if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+    @Override
+    Optional<User> findById(String s);
 
-                UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
+    @Override
+    boolean existsById(String s);
 
-                if (jwtTokenUtil.validateToken(authToken, userDetails)) {
-                    UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                            userDetails, null, userDetails.getAuthorities());
-                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(
-                            request));
-                    logger.info("authenticated user " + username + ", setting security context");
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
-                }
-            }
-        }
+    @Override
+    long count();
 
-        chain.doFilter(request, response);
-    }
+    @RestResource(exported = false)
+    @Override
+    void deleteById(String s);
 }
 ```
 
-事实上如果我们足够相信 `token` 中的数据，也就是我们足够相信签名 `token` 的 `secret` 的机制足够好，这种情况下，我们可以不用再查询数据库，而直接采用 `token` 中的数据。本例中，我们还是通过 Spring Security 的 `@UserDetailsService` 进行了数据查询，但简单验证的话，你可以采用直接验证 `token` 是否合法来避免昂贵的数据查询。
+现在我们再去 `HAL Browser` 中，输入 `/profile/users` ，看看返回的 Response Body ，我们会发现允许的操作仅剩下了读操作。
 
-接下来，我们会在 `WebSecurityConfig` 中注入这个 `filter` ，并且配置到 `HttpSecurity` 中：
-
-```java
-public class WebSecurityConfig extends WebSecurityConfigurerAdapter{
-
-    // 省略其它部分
-
-    @Bean
-    public JwtAuthenticationTokenFilter authenticationTokenFilterBean() throws Exception {
-        return new JwtAuthenticationTokenFilter();
-    }
-
-    @Override
-    protected void configure(HttpSecurity httpSecurity) throws Exception {
-        // 省略之前写的规则部分，具体看前面的代码
-
-        // 添加JWT filter
-        httpSecurity
-                .addFilterBefore(authenticationTokenFilterBean(), UsernamePasswordAuthenticationFilter.class);
-    }
+```json
+{
+  "alps": {
+    "version": "1.0",
+    "descriptors": [
+      // 省略其他部分
+      {
+        "id": "get-user",
+        "name": "user",
+        "type": "SAFE",
+        "rt": "#user-representation"
+      }
+    ]
+  }
 }
 ```
 
-## 完成鉴权（登录）、注册和更新 token 的功能
-
-到现在，我们整个 API 其实已经在安全的保护下了，但我们遇到一个问题：所有的 API 都安全了，但我们还没有用户啊，所以所有 API 都没法访问。因此要提供一个注册、登录的 API ，这个 API 应该是可以匿名访问的。给它规划的路径呢，我们前面其实在 `WebSecurityConfig` 中已经给出了，就是 `/auth` 。
-
-首先需要一个 `AuthService` ，规定一下必选动作：
+其实在这种策略下，如果我们还是继承了 `MongoRepository` ，那么我们只标记不想暴露的操作即可，也就是说我们根本不用去覆写读操作的方法。
 
 ```java
-public interface AuthService {
-    User register(User userToAdd);
-    String login(String username, String password);
-    String refresh(String oldToken);
+@Repository
+public interface UserRepo extends MongoRepository<User, String> {
+
+    @RestResource(exported = false)
+    @Override
+    <S extends User> S insert(S entity);
+
+    @RestResource(exported = false)
+    @Override
+    <S extends User> S save(S entity);
+
+    @RestResource(exported = false)
+    @Override
+    void deleteById(String s);
 }
 ```
 
-然后，实现这些必选动作，其实非常简单：
+上面的代码中我们只保留了对于写操作的三个方法，其效果和上面的是等价的，这是因为 `default` 策略默认开放所有 `public` 接口，我们的接口是继承了 `MongoRepository` ，而 `MongoRepository` 又继承了 `CrudRepository` 、 `PagingAndSortingRepository` 和 `Repository` ，这些接口中的 `public` 方法都会默认作为 Rest 资源，当然很多方法其实对应的是一个资源，比如 n 多的 findAllXXX 对应的都是 `users` 这个资源，只不过传递的参数不一样。在这种情况下，我们显式标注哪些不想暴露出去就可以了。
 
-1. 登录时要生成 `token` ，完成 Spring Security 认证，然后返回 `token` 给客户端
-2. 注册时将用户密码用 `BCrypt` 加密，写入用户角色，由于是开放注册，所以写入角色系统控制，将其写成 `ROLE_USER`
-3. 提供一个可以刷新 `token` 的接口 `refresh` 用于取得新的 `token`
+上面得到方式适合我们需要 `MongoRepository` 的很多方法，但对外不想暴露成 API ，内部的 Service 或 Controller 中还是需要这些未暴露的方法的。如果我们不需要哪些未暴露的方法，做法其实是从继承 `MongoRepository` 变为继承一个更上层的 `Repository` 类型，比如 `CrudRepository` 、 `PagingAndSortingRepository` 甚至 `Repository` 。在下面的例子中我们直接使用了 `Repository` 这个接口，注意这个接口和我们的注解重名，所以注解需要使用全名。这样我们就只暴露这三个接口，其他的方法无论是内部还是外部都没有提供。
 
 ```java
-@Service
-public class AuthServiceImpl implements AuthService {
+import dev.local.gtm.api.domain.User;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.repository.Repository;
 
-    private AuthenticationManager authenticationManager;
-    private UserDetailsService userDetailsService;
-    private JwtTokenUtil jwtTokenUtil;
-    private UserRepository userRepository;
+import java.util.Optional;
 
-    @Value("${jwt.tokenHead}")
-    private String tokenHead;
+@org.springframework.stereotype.Repository
+public interface UserRepo extends Repository<User, String> {
+    Page<User> findAll(Pageable pageable);
 
-    @Autowired
-    public AuthServiceImpl(
-            AuthenticationManager authenticationManager,
-            UserDetailsService userDetailsService,
-            JwtTokenUtil jwtTokenUtil,
-            UserRepository userRepository) {
-        this.authenticationManager = authenticationManager;
-        this.userDetailsService = userDetailsService;
-        this.jwtTokenUtil = jwtTokenUtil;
-        this.userRepository = userRepository;
-    }
+    Optional<User> findById(String s);
 
-    @Override
-    public User register(User userToAdd) {
-        final String username = userToAdd.getUsername();
-        if(userRepository.findByUsername(username)!=null) {
-            return null;
-        }
-        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
-        final String rawPassword = userToAdd.getPassword();
-        userToAdd.setPassword(encoder.encode(rawPassword));
-        userToAdd.setLastPasswordResetDate(new Date());
-        userToAdd.setRoles(asList("ROLE_USER"));
-        return userRepository.insert(userToAdd);
-    }
-
-    @Override
-    public String login(String username, String password) {
-        UsernamePasswordAuthenticationToken upToken = new UsernamePasswordAuthenticationToken(username, password);
-        final Authentication authentication = authenticationManager.authenticate(upToken);
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-
-        final UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-        final String token = jwtTokenUtil.generateToken(userDetails);
-        return token;
-    }
-
-    @Override
-    public String refresh(String oldToken) {
-        final String token = oldToken.substring(tokenHead.length());
-        String username = jwtTokenUtil.getUsernameFromToken(token);
-        JwtUser user = (JwtUser) userDetailsService.loadUserByUsername(username);
-        if (jwtTokenUtil.canTokenBeRefreshed(token, user.getLastPasswordResetDate())){
-            return jwtTokenUtil.refreshToken(token);
-        }
-        return null;
-    }
+    long count();
 }
 ```
 
-然后建立 `AuthController` 就好，这个 `AuthController` 中我们在其中使用了表达式绑定，比如 `@Value("${jwt.header}")`中的 `jwt.header`  其实是定义在 `applicaiton.yml` 中的
+### ALL 策略
 
 ```yml
-# JWT
-jwt:
-  header: Authorization
-  secret: mySecret
-  expiration: 604800
-  tokenHead: "Bearer "
-  route:
-    authentication:
-      path: auth
-      refresh: refresh
-      register: "auth/register"
+# application.yml
+spring:
+  # 省略其他部分
+  data:
+    rest:
+      detection-strategy: all
 ```
 
-同样的 `@RequestMapping(value = "${jwt.route.authentication.path}", method = RequestMethod.POST)` 中的 `jwt.route.authentication.path` 也是定义在上面的
+首先调整策略为 `all` , 说起来 `all` 和 `default` 区别可能很多同学搞不清楚，因为几乎是一样的，只不过对于 `public` 的界定不同。如下代码中我们的 `UserRepo` 和 `default` 策略那节的代码只相差一个 `public` 的范围限定，但下面的这个代码在 `all` 策略中就可以把接口暴露出来，但如果改成 `default` 策略的话，那么这个 `/users` 的资源是不存在的。
+
+```java
+@Repository
+interface UserRepo extends MongoRepository<User, String> {
+
+    @RestResource(exported = false)
+    @Override
+    <S extends User> S insert(S entity);
+
+    @RestResource(exported = false)
+    @Override
+    <S extends User> S save(S entity);
+
+    @RestResource(exported = false)
+    @Override
+    void deleteById(String s);
+}
+```
+
+### ANNOTATION 策略
+
+```yml
+# application.yml
+spring:
+  # 省略其他部分
+  data:
+    rest:
+      detection-strategy: annotated
+```
+
+如果采用 `ANNOTATION` 策略，所有要暴露的 `repository` 和 `repository` 方法都需要显式添加注解，不想暴露的方法也需要显式添加注解并设置 `exported = false` 。
+
+```java
+@RepositoryRestResource
+public interface UserRepo extends MongoRepository<User, String> {
+
+    @RestResource(exported = false)
+    @Override
+    <S extends User> S insert(S entity);
+
+    @RestResource
+    @Override
+    Page<User> findAll(Pageable pageable);
+
+    @RestResource(exported = false)
+    @Override
+    <S extends User> S save(S entity);
+
+    @RestResource
+    @Override
+    Optional<User> findById(String s);
+
+    @RestResource(exported = false)
+    @Override
+    void deleteById(String s);
+}
+```
+
+### VISIBILITY 策略
+
+```yml
+# application.yml
+spring:
+  # 省略其他部分
+  data:
+    rest:
+      detection-strategy: visibility
+```
+
+这种策略只暴露 `public` 的添加了注解 `@RepositoryRestResource` 的 `repository` 接口。也就是只有类似下面的接口才会暴露为 Rest 资源，缺少 `@RepositoryRestResource` 或者不是 `public` 的接口都不能暴露为 Rest 资源。
+
+```java
+@RepositoryRestResource
+public interface UserRepo extends MongoRepository<User, String> {
+  // 省略
+}
+```
+
+`Spring Data Rest` 在构造 API 方面非常容易，但在目前的使用上还没有普及，大部分项目使用的还是 Level 2 的 API 。而且一些周边的开源类库和它的配合还不是太好，比如笔者成书的时间上 Spring 的 Swagger 集成类库 `SpringFox` 对于 `Spring Data Rest 3.x` 还是没有支持，个人感觉在目前阶段还不适合在生产项目中使用，但可以持续关注。所以接下来的项目实践中，我们还是改回成经典的 Rest 实现模式。
+
+## 传统的 API 实现模式
+
+首先我们可以先去掉 `api/build.gradle` 中的 Data Rest 依赖
+
+```groovy
+# 删除下面这个依赖
+implementation("org.springframework.boot:spring-boot-starter-data-rest")
+```
+
+改造 `application.yml` 为
+
+```yml
+spring:
+  application:
+    name: api-service
+  devtools:
+    remote:
+      secret: thisismysecret
+  data:
+    mongodb:
+      database: gtm-api
+```
+
+### 找回熟悉的 Controller
+
+对于很多习惯了 Spring 开发的同学来讲，`Controller` ，`Service` ，`DAO` 这些套路突然间都没了会有不适感。其实呢，这些东西还在，只不过对于较简单的情景下，这些都变成了系统背后帮你做的事情。这一小节我们就先来看看如何将  `Controller` 再召唤回来。
+
+由于 `Controller` 其实就是定义 API 资源，所以我们在 rest 包下建立 `/api/web/rest/AuthResource.java` 。这样的语义比较清晰，既然是 rest 的资源就叫 `XXXResource` 。
+
+如果要让 `AuthResource` 可以和 `UserRepo` 配合工作的话，我们当然需要在 `AuthResource` 中需要引用 `TaskRepo` 。
+
+```java
+@Log4j2
+@RestController
+@RequestMapping("/api")
+@RequiredArgsConstructor
+public class AuthResource {
+    private final UserRepo userRepo;
+    //省略其它部分
+}
+```
+
+Spring 现在鼓励用构造函数来做注入，所以，我们使用 Lombok 提供的注解 `@RequiredArgsConstructor` 来自动生成一个构造函数，为什么叫做 `RequiredArgs` ？因为这个构造是使用必须的参数构成的，它相当于下面的代码，一般来说，我们如果将成员变量声明成 `private final blabla`， 那么这个 `blabla` 就是必须的参数，它必须通过构造函数赋值：
+
+```java
+@Log4j2
+@RestController
+@RequestMapping("/api")
+@RequiredArgsConstructor
+public class AuthResource {
+
+    private final UserRepo userRepo;
+
+    @AutoWired
+    public AuthResource(UserRepo userRepo){
+        this.userRepo = userRepo;
+    }
+    //省略其它部分
+}
+```
+
+当然我们为了可以让 Spring 知道这是一个支持 REST API 的 Controller ，还是需要标记其为 `@RestController`。对 Spring 熟悉的同学可能知道还有另一个注解是 `@Controller` ，那么这个 `@RestController` 和 `Controller` 有什么区别呢？ `@RestController` 是 Spring 4.x 引入的一个注解，它相当于 `@Controller` + `@RepsonseBody` ，也就是说使用 `@RestController` 之后你不用给这个 Controller 的方法加上 `@RepsonseBody` 了，详情可以参考 <https://docs.spring.io/spring/docs/current/javadoc-api/org/springframework/web/bind/annotation/RestController.html> 。
+
+拿第三章的例子来看，我们在 `getAllTasks()` 方法的声明里直接返回了 `List<Task>` ，如果使用 Postman 请求的话，会发现 Resposne Body 中有了这个数组列表。这个处理其实是通过 `@ResponseBody` 完成的。 如果使用 `@Controller` ，我们就得声明 `public @RepsonseBody List<Task> getAllTasks()` ，而 `@RestController` 就是进一步简化了我们的工作，只需在类上使用这个注解，然后在类的的方法上就不用使用 `@ResponseBody` 了。
 
 ```java
 @RestController
-public class AuthController {
-    @Value("${jwt.header}")
-    private String tokenHeader;
-
-    @Autowired
-    private AuthService authService;
-
-    @RequestMapping(value = "${jwt.route.authentication.path}", method = RequestMethod.POST)
-    public ResponseEntity<?> createAuthenticationToken(
-            @RequestBody JwtAuthenticationRequest authenticationRequest) throws AuthenticationException{
-        final String token = authService.login(authenticationRequest.getUsername(), authenticationRequest.getPassword());
-
-        // Return the token
-        return ResponseEntity.ok(new JwtAuthenticationResponse(token));
-    }
-
-    @RequestMapping(value = "${jwt.route.authentication.refresh}", method = RequestMethod.GET)
-    public ResponseEntity<?> refreshAndGetAuthenticationToken(
-            HttpServletRequest request) throws AuthenticationException{
-        String token = request.getHeader(tokenHeader);
-        String refreshedToken = authService.refresh(token);
-        if(refreshedToken == null) {
-            return ResponseEntity.badRequest().body(null);
-        } else {
-            return ResponseEntity.ok(new JwtAuthenticationResponse(refreshedToken));
-        }
-    }
-
-    @RequestMapping(value = "${jwt.route.authentication.register}", method = RequestMethod.POST)
-    public User register(@RequestBody User addedUser) throws AuthenticationException{
-        return authService.register(addedUser);
+public class TaskController {
+    // 使用@RequstMapping指定可以访问的URL路径
+    @RequestMapping("/tasks")
+    public List<Task> getAllTasks() {
+        // 省略
     }
 }
 ```
 
-### 5.2.4 使用 SSL/TLS 认证机制
-
-### 5.2.5 基于密码和基于认证的鉴权问题
-
-### 5.2.6 测试验证 API
-
-接下来，我们就可以看看我们的成果了，首先注册一个用户 `peng2` ，很完美的注册成功了
-
-![注册用户][38]
-
-然后在 `/auth` 中取得 `token` ，也很成功
-
-![取得 token][39]
-
-不使用 `token` 时，访问 `/users` 的结果，不出意料的失败，提示未授权。
-
-![不使用 token 访问 users 列表][40]
-
-使用 `token` 时，访问 `/users` 的结果，虽然仍是失败，但这次提示访问被拒绝，意思就是虽然你已经得到了授权，但由于你的会员级别还只是普卡会员，所以你的请求被拒绝。
-
-![image_1bas22va52vk1rj445fhm87k72a.png-156.9kB][41]
-
-接下来我们访问 `/users/?username=peng2`，竟然可以访问啊
-
-![访问自己的信息是允许的][42]
-
-这是由于我们为这个方法定义的权限就是：拥有 ADMIN 角色或者是当前用户本身。Spring Security 真是很方便，很强大。
+接下来我们来实现我们的登录和注册 API ，在 `AuthResource` 中添加两个方法 `login` 和 `register` ：
 
 ```java
-@PostAuthorize("returnObject.username == principal.username or hasRole('ROLE_ADMIN')")
-    @RequestMapping(value = "/",method = RequestMethod.GET)
-    public User getUserByUsername(@RequestParam(value="username") String username) {
-        return repository.findByUsername(username);
+@Log4j2
+@RestController
+@RequestMapping("/api")
+@RequiredArgsConstructor
+public class AuthResource {
+
+    private final UserRepo userRepo;
+
+    @PostMapping(value = "/auth/login")
+    public User login(@RequestBody final Auth auth) {
+        log.debug("REST 请求 -- 将对用户: {} 执行登录鉴权", auth);
+        val user = userRepo.findOneByLogin(auth.getLogin());
+        if (!user.isPresent()) {
+            throw new LoginNotFoundException();
+        }
+        if (!user.get().getPassword().equals(auth.getPassword())) {
+            throw new InvalidPasswordException();
+        }
+        return user.get();
     }
+
+    @PostMapping("/auth/register")
+    public ResponseEntity<User> register(@RequestBody final User user) {
+        log.debug("REST 请求 -- 注册用户: {} ", user);
+        if (userRepo.findOneByLogin(user.getLogin()).isPresent()) {
+            throw new LoginExistedException();
+        }
+        if (userRepo.findOneByMobile(user.getMobile()).isPresent()) {
+            throw new MobileExistedException();
+        }
+        if (userRepo.findOneByEmail(user.getEmail()).isPresent()) {
+            throw new MobileExistedException();
+        }
+        return ResponseEntity.ok(userRepo.save(user));
+    }
+}
 ```
+
+上面的代码中需要再说明几个要点：
+
+ 1. Spring 4.3 之后引入了 `@PostMapping` 、 `@PutMapping` 、 `@DeleteMapping` 、 `@PatchMapping` 和 `@GetMapping` 这几个注解。这些注解和 `@RequestMapping` 的区别在于，它们进一步简化了注解的使用，因为已经各个注解已经隐含了 HTTP 的方法，比如 `@PostMapping` 就相当于 `@RequestMapping(method = RequestMethod.POST)` 。
+ 2. 这些方法接受的参数也使用了各种修饰符，`@PathVariable` 表示参数是从路径中得来的，而 `@RequestBody` 表示参数应该从 Http Request 的`body` 中解析，类似的 `@RequestHeader` 表示参数是 Http Request 的 Header 中定义的。
+ 3. `login` 方法返回的直接是对象，而 `register` 方法返回的是 `ResponseEntity` 。那么这两种写法有哪些区别？首先 `login` 直接返回对象的话，其实也是应用了 `@ResponseBody` ，Spring 会自动帮我们把返回的对象构建成 json 放到 Response 中。而 `ResponseEntity` 就可以更全面的定制自己想要返回的内容和状态，比如我们在某种情况下希望自己控制返回的状态码和返回的内容。这种时候使用 `ResponseEntity` 就非常方便。也就是说如果你感觉 Spring 默认的处理就很好，那么使用直接的对象返回没有任何问题。但如果你想自己有对状态和内容的控制，那么就可以使用 `ResponseEntity` 。
+
+上面的代码中，我们看到有几个方法（ `findOneByLogin` 、 `findOneByMobile` 以及 `findOneByEmail` ）在 `UserRepo` 中是没有的。下面我们会来添加这几个方法，也顺便介绍 Spring Data MongoDB 中的查询方式。
