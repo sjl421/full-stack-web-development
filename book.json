@@ -6,6 +6,7 @@
   "gitbook": ">=3.2.3",
   "root": ".",
   "plugins": [
+    "toc@0.0.2",
     "search-plus@^0.0.11",
     "github@^2.0.0",
     "katex@^1.1.4",
@@ -15,9 +16,13 @@
     "donate@^1.0.2",
     "terminal@^0.3.2",
     "-sharing",
-    "sharing-plus@^0.0.11"
+    "sharing-plus"
   ],
   "pluginsConfig": {
+    "toc": {
+      "addClass": true,
+      "className": "toc"
+    },
     "github": {
       "url": "https://github.com/wpcfan"
     },

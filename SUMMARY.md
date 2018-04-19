@@ -25,4 +25,5 @@
   * [5.2  Spring Data 查询](chapter_5/chap_5_2.md)
   * [5.3  API 的安全](chapter_5/chap_5_3.md)
   * [5.4  API 文档和版本控制](chapter_5/chap_5_4.md)
-* [附录一](appendix/appendix_0.md)
+* [附录一：常见的云服务虚拟机问题和解决方案](appendix/appendix_0.md)
+* [附录二：书中使用的第三方云服务简要说明](appendix/appendix_1.md)

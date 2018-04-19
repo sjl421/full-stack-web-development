@@ -1,852 +1,532 @@
-# 构建安全的 API 接口
+# Controller 的构建
 
-## 为什么要保护 API？
+## 改造 TaskRepo 和 UserRepo
 
-通常情况下，把 API 直接暴露出去是风险很大的，不说别的，直接被机器攻击就喝一壶的。那么一般来说，对 API 要划分出一定的权限级别，然后做一个用户的鉴权，依据鉴权结果给予用户开放对应的 API 。目前，比较主流的方案有几种:
-
- 1. 用户名和密码鉴权，使用 Session 保存用户鉴权结果。
- 2. 自行采用 `token` 进行鉴权，自己设计的 `token` 往往由于设计时没有考虑周全，后期存在各种兼容性问题。
- 3. 使用 `OAuth`/`OAuth2` 进行鉴权（其实 `OAuth` 也是一种基于 `token` 的鉴权，只是没有规定 `token` 的生成方式）
- 4. 使用 `JWT` 作为 `token`
-
-第一种就不介绍了，由于依赖 `Session` 来维护状态，也不太适合移动时代，新的项目就不要采用了。第二种的兼容性和可维护性较差而 `OAuth` 其实对于不做开放平台的公司有些过于复杂。我们主要介绍第四种：`JWT` 。
-
-## 什么是JWT？
-
-下面是一个 JWT 的工作流程图。模拟一下实际的流程是这样的（假设受保护的 API 在`/protected`中）
-
- 1. 用户导航到登录页，输入用户名、密码，进行登录
- 2. 服务器验证登录鉴权，如果改用户合法，根据用户的信息和服务器的规则生成 `JWT token`
- 3. 服务器将该 `token` 以 json 形式返回（其实不一定要 json 形式，这里说的是一种常见的做法）
- 4. 用户得到 token，存在 localStorage、cookie、IndexDB 或其它数据存储形式中。
- 5. 以后用户请求`/protected`中的 API 时，在请求的 header 中加入 `Authorization: Bearer xxxx(token)` 。此处注意 token 之前有一个 7 字符长度的 `Bearer`，注意 `Bearer` 后应该有一个空格。
- 6. 服务器端对此 token 进行检验，如果合法就解析其中内容，根据其拥有的权限和自己的业务逻辑给出对应的响应结果。
- 7. 用户取得结果
-
-![JWT工作流程图](/assets/2018-04-09-17-48-56.png)
-
-为了更好的理解这个token是什么，我们先来看一个token生成后的样子，下面那坨乱糟糟的就是了。
-
-```txt
-eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJ3YW5nIiwiY3JlYXRlZCI6MTQ4OTA3OTk4MTM5MywiZXhwIjoxNDg5Njg0NzgxfQ.RC-BYCe_UZ2URtWddUpWXIp4NMsoeq2O6UF-8tVplqXY1-CI9u1-a-9DAAJGfNWkHE81mpnR3gXzfrBAB3WUAg
-```
-
-但仔细看到的话还是可以看到这个 `token` 分成了三部分，每部分用 `.` 分隔，每段都是用 `Base64` 编码的。如果我们用一个Base64的解码器的话  <https://www.base64decode.org> ，可以看到第一部分 `eyJhbGciOiJIUzUxMiJ9` 被解析成了:
-
-```json
-{
-    "alg":"HS512"
-}
-```
-
-这是告诉我们HMAC采用HS512算法对JWT进行的签名。
-
-第二部分 `eyJzdWIiOiJ3YW5nIiwiY3JlYXRlZCI6MTQ4OTA3OTk4MTM5MywiZXhwIjoxNDg5Njg0NzgxfQ` 被解码之后是
-
-```json
-{
-    "sub":"wang",
-    "created":1489079981393,
-    "exp":1489684781
-}
-
-```
-
-这段告诉我们这个 `token` 中含有的数据声明（ `Claim` ），这个例子里面有三个声明：`sub`, `created` 和 `exp`。在我们这个例子中，分别代表着用户名、创建时间和过期时间，当然你可以把任意数据声明在这里。
-
-看到这里，你可能会想这是个什么鬼 `token` ，所有信息都透明啊，安全怎么保障？别急，我们看看 `token` 的第三段  `RC-BYCe_UZ2URtWddUpWXIp4NMsoeq2O6UF-8tVplqXY1-CI9u1-a-9DAAJGfNWkHE81mpnR3gXzfrBAB3WUAg` 。同样使用 Base64 解码之后，咦，这是什么东东
-
-```txt
-D X	DmYTeȧLUZcPZ0$gZAY_7wY@
-```
-
-最后一段其实是签名，这个签名必须知道秘钥才能计算。这个也是 `JWT` 的安全保障。这里提一点注意事项，由于数据声明（ `Claim` ）是公开的，千万不要把密码等敏感字段放进去，否则就等于是公开给别人了。
-
-也就是说JWT是由三段组成的，按官方的叫法分别是 `header` （头）、 `payload` （负载）和 `signature` （签名）：
-
-```txt
-header.payload.signature
-```
-
-头中的数据通常包含两部分：一个是我们刚刚看到的 `alg`，这个词是 `algorithm` 的缩写，就是指明算法。另一个可以添加的字段是 `token` 的类型(按 `RFC 7519` 实现的 `token` 机制可不只 JWT 一种)，但如果我们采用的是 `JWT` 的话，指定这个就多余了。
-
-```json
-{
-  "alg": "HS512",
-  "typ": "JWT"
-}
-```
-
-`payload` 中可以放置三类数据：系统保留的、公共的和私有的：
-
-* 系统保留的声明（ `Reserved claims` ）：这类声明不是必须的，但是是建议使用的，包括： `iss` (签发者), `exp` (过期时间), `sub` (主题), `aud` (目标受众)等。这里我们发现都用的缩写的三个字符，这是由于 `JWT` 的目标就是尽可能小巧。
-* 公共声明：这类声明需要在 IANA JSON Web Token Registry 中定义或者提供一个 URI ，因为要避免重名等冲突。
-* 私有声明：这个就是你根据业务需要自己定义的数据了。
-
-签名的过程是这样的：采用 `header` 中声明的算法，接受三个参数： `base64` 编码的 `header` 、 `base64` 编码的 `payload` 和秘钥（ `secret` ）进行运算。签名这一部分如果你愿意的话，可以采用 `RSASHA256` 的方式进行公钥、私钥对的方式进行，如果安全性要求的高的话。
-
-```txt
-HMACSHA256(
-  base64UrlEncode(header) + "." +
-  base64UrlEncode(payload),
-  secret)
-```
-
-## JWT的生成和解析
-
-为了简化我们的工作，这里引入一个比较成熟的JWT类库，叫 `jjwt` <https://github.com/jwtk/jjwt> 。这个类库可以用于Java和Android的JWT token的生成和验证。
-
-`JWT` 的生成可以使用下面这样的代码完成：
+`TaskRepo` 目前先保持前面改造后的样子。
 
 ```java
-String generateToken(Map<String, Object> claims) {
-    return Jwts.builder()
-            .setClaims(claims)
-            .setExpiration(generateExpirationDate())
-            .signWith(SignatureAlgorithm.HS512, secret) //采用什么算法是可以自己选择的，不一定非要采用HS512
-            .compact();
+@Repository
+public interface TaskRepo extends MongoRepository<Task, String> {
+    Page<Task> findByDescLike(Pageable pageable, @Param("desc") String desc);
+    Page<Task> findByOwnerMobile(Pageable pageable, @Param("mobile") String mobile);
 }
 ```
 
-数据声明（ `Claim` ）其实就是一个 `Map` ，比如我们想放入用户名，可以简单的创建一个 `Map` 然后 `put` 进去就可以了。
+`UserRepo` 需要在用户注册时确保用户名、电子邮件和手机号唯一，因此需要检查这几项是否在数据库中已经存在。对于这几项检查是每个用户注册时都需要做的，而且由于可能会出现同一用户多次提交，比如用户名提示已存在，更改后还是已存在，所以我们给这几个查询分别做缓存 `@Cacheable(cacheNames = USERS_BY_XXX_CACHE)` 。
 
 ```java
-Map<String, Object> claims = new HashMap<>();
-claims.put(CLAIM_KEY_USERNAME, username());
+package dev.local.gtm.api.repository;
+
+import dev.local.gtm.api.domain.User;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.mongodb.repository.MongoRepository;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
+
+@Repository
+public interface UserRepo extends MongoRepository<User, String> {
+    String USERS_BY_LOGIN_CACHE = "usersByLogin";
+
+    String USERS_BY_MOBILE_CACHE = "usersByMobile";
+
+    String USERS_BY_EMAIL_CACHE = "usersByEmail";
+
+    @Cacheable(cacheNames = USERS_BY_MOBILE_CACHE)
+    Optional<User> findOneByMobile(@Param("mobile") String mobile);
+
+    @Cacheable(cacheNames = USERS_BY_EMAIL_CACHE)
+    Optional<User> findOneByEmail(@Param("email") String email);
+
+    @Cacheable(cacheNames = USERS_BY_LOGIN_CACHE)
+    Optional<User> findOneByLogin(@Param("login") String login);
+
+    Page<User> findAllByLoginNot(Pageable pageable, @Param("login") String login);
+}
 ```
 
-解析也很简单，利用 `jjwt` 提供的 parser 传入秘钥，然后就可以解析 `token` 了。
+这里面还需要指出的是，对于 Java 8 的 `Optional` 不熟悉的同学，可以去看 Oracle 的一个官方教程 <http://www.oracle.com/technetwork/articles/java/java8-optional-2175753.html> 。
+
+## 实现 Controller
+
+实现用户的登录、注册和忘记密码，我们接下来逐一分析它们的业务逻辑
+
+* 登录 -- 需要传入用户的用户名和密码，然后根据用户名查找用户，如果系统中不存在该用户，则需要以异常形式告诉客户端。如果存在，则继续比较密码是否相同，如果相同则以 `json` 形式返回该用户信息，否则需要以异常形式提示用户名密码不匹配。
+* 注册 -- 由于用户的用户名、电子邮件和手机号都应该是唯一的，所以在注册的时候，要先去检查是否这些在系统中已经存在，如果存在需要以异常形式告知用户，没有异常的话就可以新建用户并返回用户信息了。
+* 忘记密码 -- 忘记密码其实是一个两个步骤的操作：验证手机和重置密码。所以其实我们这个功能会有两个 API
+  * 验证手机： 这里会采用一个第三方的 API （<http://leancloud.cn>） 来去做，也顺便学习一下如何在后端访问第三方的 Rest API。验证的过程是先看手机号是否存在，如果不存在需要以异常形式告知用户。如果存在，将手机号和短信验证码提交给 LeanCloud 的 Rest API 检查，返回的结果如果是成功的，那么就随机生成一个重置密钥保存到 `User` 的 `resetKey` 属性中。如果不成功，以异常形式告知用户。
+  * 重置密码：客户端发送手机号、密码和重置密钥到此 API。首先检查是否存在手机号对应的用户，如果不存在，以异常形式告知用户；如果存在，检查该用户的 `resetKey` 是否和传入的密钥匹配，如果不匹配，以异常形式告知用户；如果匹配，按照传入的密码重置该用户密码，且将 `resetKey` 设置为 null。
 
 ```java
-Claims getClaimsFromToken(String token) {
-    Claims claims;
-    try {
-        claims = Jwts.parser()
-                .setSigningKey(secret)
-                .parseClaimsJws(token)
-                .getBody();
-    } catch (Exception e) {
-        claims = null;
-    }
-    return claims;
-}
-```
+package dev.local.gtm.api.web.rest;
 
-`JWT` 本身没啥难度，但安全整体是一个比较复杂的事情， `JWT` 只不过提供了一种基于 `token` 的请求验证机制。但我们的用户权限，对于 API 的权限划分、资源的权限划分，用户的验证等等都不是 `JWT` 负责的。也就是说，请求验证后，你是否有权限看对应的内容是由你的用户角色决定的。所以我们这里要利用 `Spring` 的一个子项目 `Spring Security` 来简化我们的工作。
+import dev.local.gtm.api.config.propsupport.SmsCaptchaProperties;
+import dev.local.gtm.api.config.propsupport.SmsCodeProperties;
+import dev.local.gtm.api.domain.*;
+import dev.local.gtm.api.repository.UserRepo;
+import dev.local.gtm.api.util.CredentialUtil;
+import dev.local.gtm.api.web.exception.*;
+import io.swagger.annotations.ApiOperation;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.log4j.Log4j2;
+import lombok.val;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestTemplate;
 
-## 使用 Spring Security 规划角色安全
+import java.util.HashMap;
 
-Spring Security 是一个基于 Spring 的通用安全框架，里面内容太多了，本文的主要目的也不是展开讲这个框架，而是如何利用 Spring Security 和 JWT 一起来完成 API 保护。所以关于 Spring Secruity 的基础内容或展开内容，请自行去官网学习<http://projects.spring.io/spring-security> 。
+@Log4j2
+@RestController
+@RequestMapping("/api")
+@RequiredArgsConstructor
+public class AuthResource {
 
-## 背景知识
+    private final UserRepo userRepo;
+    private final RestTemplate restTemplate;
+    private final SmsCaptchaProperties captchaProperties;
+    private final SmsCodeProperties codeProperties;
 
-如果你的系统有用户的概念的话，一般来说，你应该有一个用户表，最简单的用户表，应该有三列：Id ，Username 和 Password ，类似下表这种
-
-| ID | USERNAME | PASSWORD
-|----|----------|----------
-| 10 | wang | abcdefg
-
-而且不是所有用户都是一种角色，比如网站管理员、供应商、财务等等，这些角色和网站的直接用户需要的权限可能是不一样的。那么我们就需要一个角色表：
-
-| ID | ROLE
-|----|------
-| 10 | USER
-| 20 | ADMIN
-
-当然我们还需要一个可以将用户和角色关联起来建立映射关系的表。
-
-| USER_ID | ROLE_ID
-|----|------
-| 10 | 10
-| 20 | 20
-
-这是典型的一个关系型数据库的用户角色的设计，由于我们要使用的MongoDB是一个文档型数据库，所以让我们重新审视一下这个结构。
-
-这个数据结构的优点在于它避免了数据的冗余，每个表负责自己的数据，通过关联表进行关系的描述，同时也保证的数据的完整性：比如当你修改角色名称后，没有脏数据的产生。
-
-但是这种事情在用户权限这个领域发生的频率到底有多少呢？有多少人每天不停的改的角色名称？当然如果你的业务场景确实是需要保证数据完整性，你还是应该使用关系型数据库。但如果没有高频的对于角色表的改动，其实我们是不需要这样的一个设计的。在 MongoDB 中我们可以将其简化为
-
-```json
-{
-  _id: <id_generated>
-  username: 'user',
-  password: 'pass',
-  roles: ['USER', 'ADMIN']
-}
-```
-
-基于以上考虑，我们重构一下 `User` 类，
-
-```java
-@Data
-public class User {
-    @Id
-    private String id;
-
-    @Indexed(unique=true, direction= IndexDirection.DESCENDING, dropDups=true)
-    private String username;
-
-    private String password;
-    private String email;
-    private Date lastPasswordResetDate;
-    private List<String> roles;
-}
-```
-
-![在 IDEA 中激活 Annotation Processing](/assets/2018-04-11-10-29-21.png)
-
-当然你可能发现这个类有点怪，只有一些 `field` ，这个简化的能力是一个叫 `lombok` 类库提供的 ，这个很多开发过Android 的童鞋应该熟悉，是用来简化 POJO 的创建的一个类库。简单说一下，采用 `lombok` 提供的 `@Data` 修饰符后可以简写成，原来的一坨 getter 和 setter 以及constructor 等都不需要写了。类似的 `Todo` 可以改写成：
-
-```java
-@Data
-public class Todo {
-    @Id private String id;
-    private String desc;
-    private boolean completed;
-    private User user;
-}
-```
-
-增加这个类库只需在 `build.gradle` 中增加下面这行
-
-```gradle
-dependencies {
-  // 省略其它依赖
-  implementation("org.projectlombok:lombok:${lombokVersion}")
-}
-```
-
-## 在 SpringBoot 中启用 Spring Security
-
-要在 Spring Boot 中引入 Spring Security 非常简单，修改 `build.gradle`，增加一个引用 `org.springframework.boot:spring-boot-starter-security`：
-
-```gradle
-dependencies {
-  implementation("org.springframework.boot:spring-boot-starter-data-rest")
-  implementation("org.springframework.boot:spring-boot-starter-data-mongodb")
-  implementation("org.springframework.boot:spring-boot-starter-security")
-  implementation("io.jsonwebtoken:jjwt:${jjwtVersion}")
-  implementation("org.projectlombok:lombok:${lombokVersion}")
-  testImplementation("org.springframework.boot:spring-boot-starter-test")
-}
-```
-
-你可能发现了，我们不只增加了对Spring Security的编译依赖，还增加 `jjwt` 的依赖。
-
-Spring Security 需要我们实现几个东西，第一个是 `UserDetails` ：这个接口中规定了用户的几个必须要有的方法，所以我们创建一个 `JwtUser` 类来实现这个接口。为什么不直接使用 `User` 类？因为这个 `UserDetails` 完全是为了安全服务的，它和我们的领域类可能有部分属性重叠，但很多的接口其实是安全定制的，所以最好新建一个类：
-
-```java
-public class JwtUser implements UserDetails {
-    private final String id;
-    private final String username;
-    private final String password;
-    private final String email;
-    private final Collection<? extends GrantedAuthority> authorities;
-    private final Date lastPasswordResetDate;
-
-    public JwtUser(
-            String id,
-            String username,
-            String password,
-            String email,
-            Collection<? extends GrantedAuthority> authorities,
-            Date lastPasswordResetDate) {
-        this.id = id;
-        this.username = username;
-        this.password = password;
-        this.email = email;
-        this.authorities = authorities;
-        this.lastPasswordResetDate = lastPasswordResetDate;
-    }
-    //返回分配给用户的角色列表
-    @Override
-    public Collection<? extends GrantedAuthority> getAuthorities() {
-        return authorities;
+    @PostMapping(value = "/auth/login")
+    public User login(@RequestBody final Auth auth) {
+        log.debug("REST 请求 -- 将对用户: {} 执行登录鉴权", auth);
+        return userRepo.findOneByLogin(auth.getLogin())
+                .map(user -> {
+                    if (user.getPassword().equals(auth.getPassword())) {
+                        throw new InvalidPasswordException();
+                    }
+                    return user;
+                }).orElseThrow(LoginNotFoundException::new);
     }
 
-    @JsonIgnore
-    public String getId() {
-        return id;
-    }
-
-    @JsonIgnore
-    @Override
-    public String getPassword() {
-        return password;
-    }
-
-    @Override
-    public String getUsername() {
-        return username;
-    }
-    // 账户是否未过期
-    @JsonIgnore
-    @Override
-    public boolean isAccountNonExpired() {
-        return true;
-    }
-    // 账户是否未锁定
-    @JsonIgnore
-    @Override
-    public boolean isAccountNonLocked() {
-        return true;
-    }
-    // 密码是否未过期
-    @JsonIgnore
-    @Override
-    public boolean isCredentialsNonExpired() {
-        return true;
-    }
-    // 账户是否激活
-    @JsonIgnore
-    @Override
-    public boolean isEnabled() {
-        return true;
-    }
-    // 这个是自定义的，返回上次密码重置日期
-    @JsonIgnore
-    public Date getLastPasswordResetDate() {
-        return lastPasswordResetDate;
-    }
-}
-```
-
-这个接口中规定的很多方法我们都简单粗暴的设成直接返回某个值了，这是为了简单起见，你在实际开发环境中还是要根据具体业务调整。当然由于两个类还是有一定关系的，为了写起来简单，我们写一个工厂类来由领域对象创建 `JwtUser`，这个工厂就叫 `JwtUserFactory` 吧：
-
-```java
-public final class JwtUserFactory {
-
-    private JwtUserFactory() {
-    }
-
-    public static JwtUser create(User user) {
-        return new JwtUser(
-                user.getId(),
-                user.getUsername(),
-                user.getPassword(),
-                user.getEmail(),
-                mapToGrantedAuthorities(user.getRoles()),
-                user.getLastPasswordResetDate()
-        );
-    }
-
-    private static List<GrantedAuthority> mapToGrantedAuthorities(List<String> authorities) {
-        return authorities.stream()
-                .map(SimpleGrantedAuthority::new)
-                .collect(Collectors.toList());
-    }
-}
-```
-
-第二个要实现的是 `UserDetailsService`，这个接口只定义了一个方法 `loadUserByUsername`，顾名思义，就是提供一种从用户名可以查到用户并返回的方法。注意，不一定是数据库哦，文本文件、xml文件等等都可能成为数据源，这也是为什么 Spring 提供这样一个接口的原因：保证你可以采用灵活的数据源。接下来我们建立一个 `JwtUserDetailsServiceImpl` 来实现这个接口。
-
-```java
-@Service
-public class JwtUserDetailsServiceImpl implements UserDetailsService {
-    @Autowired
-    private UserRepository userRepository;
-
-    @Override
-    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        User user = userRepository.findByUsername(username);
-
-        if (user == null) {
-            throw new UsernameNotFoundException(String.format("No user found with username '%s'.", username));
-        } else {
-            return JwtUserFactory.create(user);
+    @PostMapping("/auth/register")
+    public ResponseEntity<User> register(@RequestBody User user) {
+        log.debug("REST 请求 -- 注册用户: {} ", user);
+        if (userRepo.findOneByLogin(user.getLogin()).isPresent()) {
+            throw new LoginExistedException();
         }
-    }
-}
-
-```
-
-为了让 Spring 可以知道我们想怎样控制安全性，我们还需要建立一个安全配置类 `WebSecurityConfig`：
-
-```java
-@Configuration
-@EnableWebSecurity
-@EnableGlobalMethodSecurity(prePostEnabled = true)
-public class WebSecurityConfig extends WebSecurityConfigurerAdapter{
-
-    // Spring会自动寻找同样类型的具体类注入，这里就是JwtUserDetailsServiceImpl了
-    @Autowired
-    private UserDetailsService userDetailsService;
-
-    @Autowired
-    public void configureAuthentication(AuthenticationManagerBuilder authenticationManagerBuilder) throws Exception {
-        authenticationManagerBuilder
-                // 设置UserDetailsService
-                .userDetailsService(this.userDetailsService)
-                // 使用BCrypt进行密码的hash
-                .passwordEncoder(passwordEncoder());
-    }
-    // 装载BCrypt密码编码器
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
+        if (userRepo.findOneByMobile(user.getMobile()).isPresent()) {
+            throw new MobileExistedException();
+        }
+        if (userRepo.findOneByEmail(user.getEmail()).isPresent()) {
+            throw new EmailExistedException();
+        }
+        return ResponseEntity.ok(userRepo.save(user));
     }
 
-    @Override
-    protected void configure(HttpSecurity httpSecurity) throws Exception {
-        httpSecurity
-                // 由于使用的是JWT，我们这里不需要csrf
-                .csrf().disable()
-
-                // 基于token，所以不需要session
-                .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS).and()
-
-                .authorizeRequests()
-                //.antMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-
-                // 允许对于网站静态资源的无授权访问
-                .antMatchers(
-                        HttpMethod.GET,
-                        "/",
-                        "/*.html",
-                        "/favicon.ico",
-                        "/**/*.html",
-                        "/**/*.css",
-                        "/**/*.js"
-                ).permitAll()
-                // 对于获取token的rest api要允许匿名访问
-                .antMatchers("/auth/**").permitAll()
-                // 除上面外的所有请求全部需要鉴权认证
-                .anyRequest().authenticated();
-
-        // 禁用缓存
-        httpSecurity.headers().cacheControl();
-    }
-}
-```
-
-接下来我们要规定一下哪些资源需要什么样的角色可以访问了，在 `UserController` 加一个修饰符 `@PreAuthorize("hasRole('ADMIN')")` 表示这个资源只能被拥有 `ADMIN` 角色的用户访问。
-
-```java
-/**
- * 在 @PreAuthorize 中我们可以利用内建的 SPEL 表达式：比如 'hasRole()' 来决定哪些用户有权访问。
- * 需注意的一点是 hasRole 表达式认为每个角色名字前都有一个前缀 'ROLE_'。所以这里的 'ADMIN' 其实在
- * 数据库中存储的是 'ROLE_ADMIN' 。这个 @PreAuthorize 可以修饰Controller也可修饰Controller中的方法。
- **/
-@RestController
-@RequestMapping("/users")
-@PreAuthorize("hasRole('ADMIN')")
-public class UserController {
-    @Autowired
-    private UserRepository repository;
-
-    @RequestMapping(method = RequestMethod.GET)
-    public List<User> getUsers() {
-        return repository.findAll();
+    @PostMapping(value = "/auth/mobile")
+    @ResponseStatus(value = HttpStatus.OK)
+    public void verifyMobile(@RequestBody MobileVerification verification) {
+        log.debug("REST 请求 -- 验证手机号 {} 和短信验证码 {}", verification.getMobile(), verification.getCode());
+        userRepo.findOneByMobile(verification.getMobile())
+                .map(user -> {
+                    val code = verifySmsCode(verification);
+                    if (code.value() != 200) {
+                        throw new MobileVerificationFailedException(code.getReasonPhrase());
+                    }
+                    user.setResetKey(CredentialUtil.generateResetKey());
+                    return userRepo.save(user);
+                })
+                .orElseThrow(MobileNotFoundException::new);
     }
 
-    // 略去其它部分
-}
-```
+    @PostMapping(value = "/auth/reset")
+    public void resetPassword(@RequestBody KeyAndPassword keyAndPassword) {
+        log.debug("REST 请求 -- 重置密码 {}", keyAndPassword);
+        userRepo.findOneByMobile(keyAndPassword.getMobile())
+                .map(user -> {
+                    if (!user.getResetKey().equals(keyAndPassword.getResetKey())) {
+                        throw new ResetKeyNotMatchException();
+                    }
+                    user.setPassword(keyAndPassword.getPassword());
+                    user.setResetKey(null);
+                    return userRepo.save(user);
+                })
+                .orElseThrow(LoginNotFoundException::new);
+    }
 
-类似的我们给 `TodoController` 加上  `@PreAuthorize("hasRole('USER')")` ，标明这个资源只能被拥有 `USER` 角色的用户访问：
-
-```java
-@RestController
-@RequestMapping("/todos")
-@PreAuthorize("hasRole('USER')")
-public class TodoController {
-    // 略去
-}
-```
-
-现在应该 Spring Security 可以工作了，但为了可以更清晰的看到工作日志，我们希望配置一下，在和 `src` 同级建立一个 `config` 文件夹，在这个文件夹下面新建一个 `application.yml`。
-
-```yml
-# Server configuration
-server:
-  port: 8090
-  contextPath:
-
-# Spring configuration
-spring:
-  jackson:
-    serialization:
-      INDENT_OUTPUT: true
-  data.mongodb:
-    host: localhost
-    port: 27017
-    database: springboot
-
-# Logging configuration
-logging:
-  level:
-    org.springframework:
-      data: DEBUG
-      security: DEBUG
-
-```
-
-我们除了配置了logging的一些东东外，也顺手设置了数据库和http服务的一些配置项，现在我们的服务器会在8090端口监听，而spring data和security的日志在debug模式下会输出到console。
-
-现在启动服务后，访问 `http://localhost:8090` 你可以看到根目录还是正常显示的
-
-![根目录还是正常可以访问的][37]
-
-但我们试一下 `http://localhost:8090/users` ，观察一下console，我们会看到如下的输出，告诉由于用户未鉴权，我们访问被拒绝了。
-
-```txt
-2017-03-10 15:51:53.351 DEBUG 57599 --- [nio-8090-exec-4] o.s.s.w.a.ExceptionTranslationFilter     : Access is denied (user is anonymous); redirecting to authentication entry point
-
-org.springframework.security.access.AccessDeniedException: Access is denied
-    at org.springframework.security.access.vote.AffirmativeBased.decide(AffirmativeBased.java:84) ~[spring-securiåty-core-4.2.1.RELEASE.jar:4.2.1.RELEASE]
-```
-
-## 集成 JWT 和 Spring Securtiy
-
-到现在，我们还是让 JWT 和 Spring Security 各自为战，并没有集成起来。要想要 JWT 在 Spring 中工作，我们应该新建一个 `filter` ，并把它配置在 `WebSecurityConfig` 中。
-
-```java
-@Component
-public class JwtAuthenticationTokenFilter extends OncePerRequestFilter {
-
-    @Autowired
-    private UserDetailsService userDetailsService;
-
-    @Autowired
-    private JwtTokenUtil jwtTokenUtil;
-
-    @Value("${jwt.header}")
-    private String tokenHeader;
-
-    @Value("${jwt.tokenHead}")
-    private String tokenHead;
-
-    @Override
-    protected void doFilterInternal(
-            HttpServletRequest request,
-            HttpServletResponse response,
-            FilterChain chain) throws ServletException, IOException {
-        String authHeader = request.getHeader(this.tokenHeader);
-        if (authHeader != null && authHeader.startsWith(tokenHead)) {
-            final String authToken = authHeader.substring(tokenHead.length()); // The part after "Bearer "
-            String username = jwtTokenUtil.getUsernameFromToken(authToken);
-
-            logger.info("checking authentication " + username);
-
-            if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-
-                UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
-
-                if (jwtTokenUtil.validateToken(authToken, userDetails)) {
-                    UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                            userDetails, null, userDetails.getAuthorities());
-                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(
-                            request));
-                    logger.info("authenticated user " + username + ", setting security context");
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
-                }
+    @PostMapping("/auth/captcha")
+    public Captcha verifyCaptcha(@RequestBody final Captcha captcha) {
+        val body = new HashMap<String, String>();
+        body.put("captcha_code", captcha.getCode());
+        body.put("captcha_token", captcha.getToken());
+        val entity = new HttpEntity<>(body);
+        try {
+            val validateCaptcha = restTemplate.postForObject(captchaProperties.getVerificationUrl(), entity, Captcha.class);
+            if (validateCaptcha == null) {
+                throw new InternalServerErrorException("返回对象为空，无法进行验证");
             }
-        }
-
-        chain.doFilter(request, response);
-    }
-}
-```
-
-事实上如果我们足够相信 `token` 中的数据，也就是我们足够相信签名 `token` 的 `secret` 的机制足够好，这种情况下，我们可以不用再查询数据库，而直接采用 `token` 中的数据。本例中，我们还是通过 Spring Security 的 `@UserDetailsService` 进行了数据查询，但简单验证的话，你可以采用直接验证 `token` 是否合法来避免昂贵的数据查询。
-
-接下来，我们会在 `WebSecurityConfig` 中注入这个 `filter` ，并且配置到 `HttpSecurity` 中：
-
-```java
-public class WebSecurityConfig extends WebSecurityConfigurerAdapter{
-
-    // 省略其它部分
-
-    @Bean
-    public JwtAuthenticationTokenFilter authenticationTokenFilterBean() throws Exception {
-        return new JwtAuthenticationTokenFilter();
-    }
-
-    @Override
-    protected void configure(HttpSecurity httpSecurity) throws Exception {
-        // 省略之前写的规则部分，具体看前面的代码
-
-        // 添加JWT filter
-        httpSecurity
-                .addFilterBefore(authenticationTokenFilterBean(), UsernamePasswordAuthenticationFilter.class);
-    }
-}
-```
-
-## 完成鉴权（登录）、注册和更新 token 的功能
-
-到现在，我们整个 API 其实已经在安全的保护下了，但我们遇到一个问题：所有的 API 都安全了，但我们还没有用户啊，所以所有 API 都没法访问。因此要提供一个注册、登录的 API ，这个 API 应该是可以匿名访问的。给它规划的路径呢，我们前面其实在 `WebSecurityConfig` 中已经给出了，就是 `/auth` 。
-
-首先需要一个 `AuthService` ，规定一下必选动作：
-
-```java
-public interface AuthService {
-    User register(User userToAdd);
-    String login(String username, String password);
-    String refresh(String oldToken);
-}
-```
-
-然后，实现这些必选动作，其实非常简单：
-
-1. 登录时要生成 `token` ，完成 Spring Security 认证，然后返回 `token` 给客户端
-2. 注册时将用户密码用 `BCrypt` 加密，写入用户角色，由于是开放注册，所以写入角色系统控制，将其写成 `ROLE_USER`
-3. 提供一个可以刷新 `token` 的接口 `refresh` 用于取得新的 `token`
-
-```java
-@Service
-public class AuthServiceImpl implements AuthService {
-
-    private AuthenticationManager authenticationManager;
-    private UserDetailsService userDetailsService;
-    private JwtTokenUtil jwtTokenUtil;
-    private UserRepository userRepository;
-
-    @Value("${jwt.tokenHead}")
-    private String tokenHead;
-
-    @Autowired
-    public AuthServiceImpl(
-            AuthenticationManager authenticationManager,
-            UserDetailsService userDetailsService,
-            JwtTokenUtil jwtTokenUtil,
-            UserRepository userRepository) {
-        this.authenticationManager = authenticationManager;
-        this.userDetailsService = userDetailsService;
-        this.jwtTokenUtil = jwtTokenUtil;
-        this.userRepository = userRepository;
-    }
-
-    @Override
-    public User register(User userToAdd) {
-        final String username = userToAdd.getUsername();
-        if(userRepository.findByUsername(username)!=null) {
-            return null;
-        }
-        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
-        final String rawPassword = userToAdd.getPassword();
-        userToAdd.setPassword(encoder.encode(rawPassword));
-        userToAdd.setLastPasswordResetDate(new Date());
-        userToAdd.setRoles(asList("ROLE_USER"));
-        return userRepository.insert(userToAdd);
-    }
-
-    @Override
-    public String login(String username, String password) {
-        UsernamePasswordAuthenticationToken upToken = new UsernamePasswordAuthenticationToken(username, password);
-        final Authentication authentication = authenticationManager.authenticate(upToken);
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-
-        final UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-        final String token = jwtTokenUtil.generateToken(userDetails);
-        return token;
-    }
-
-    @Override
-    public String refresh(String oldToken) {
-        final String token = oldToken.substring(tokenHead.length());
-        String username = jwtTokenUtil.getUsernameFromToken(token);
-        JwtUser user = (JwtUser) userDetailsService.loadUserByUsername(username);
-        if (jwtTokenUtil.canTokenBeRefreshed(token, user.getLastPasswordResetDate())){
-            return jwtTokenUtil.refreshToken(token);
-        }
-        return null;
-    }
-}
-```
-
-然后建立 `AuthController` 就好，这个 `AuthController` 中我们在其中使用了表达式绑定，比如 `@Value("${jwt.header}")`中的 `jwt.header`  其实是定义在 `applicaiton.yml` 中的
-
-```yml
-# JWT
-jwt:
-  header: Authorization
-  secret: mySecret
-  expiration: 604800
-  tokenHead: "Bearer "
-  route:
-    authentication:
-      path: auth
-      refresh: refresh
-      register: "auth/register"
-```
-
-同样的 `@RequestMapping(value = "${jwt.route.authentication.path}", method = RequestMethod.POST)` 中的 `jwt.route.authentication.path` 也是定义在上面的
-
-```java
-@RestController
-public class AuthController {
-    @Value("${jwt.header}")
-    private String tokenHeader;
-
-    @Autowired
-    private AuthService authService;
-
-    @RequestMapping(value = "${jwt.route.authentication.path}", method = RequestMethod.POST)
-    public ResponseEntity<?> createAuthenticationToken(
-            @RequestBody JwtAuthenticationRequest authenticationRequest) throws AuthenticationException{
-        final String token = authService.login(authenticationRequest.getUsername(), authenticationRequest.getPassword());
-
-        // Return the token
-        return ResponseEntity.ok(new JwtAuthenticationResponse(token));
-    }
-
-    @RequestMapping(value = "${jwt.route.authentication.refresh}", method = RequestMethod.GET)
-    public ResponseEntity<?> refreshAndGetAuthenticationToken(
-            HttpServletRequest request) throws AuthenticationException{
-        String token = request.getHeader(tokenHeader);
-        String refreshedToken = authService.refresh(token);
-        if(refreshedToken == null) {
-            return ResponseEntity.badRequest().body(null);
-        } else {
-            return ResponseEntity.ok(new JwtAuthenticationResponse(refreshedToken));
+            return Captcha.builder()
+                    .code(captcha.getCode())
+                    .token(captcha.getToken())
+                    .validatedMsg(validateCaptcha.getValidatedMsg())
+                    .build();
+        } catch (HttpStatusCodeException ex) {
+            throw new CaptchaVerificationFailedException(ex.getStatusCode().getReasonPhrase());
         }
     }
 
-    @RequestMapping(value = "${jwt.route.authentication.register}", method = RequestMethod.POST)
-    public User register(@RequestBody User addedUser) throws AuthenticationException{
-        return authService.register(addedUser);
+    private HttpStatus verifySmsCode(final MobileVerification verification) {
+        val body = new HashMap<String, String>();
+        body.put("mobilePhoneNumber", verification.getMobile());
+        val entity = new HttpEntity<>(body);
+        try {
+            ResponseEntity<Void> response = restTemplate.postForEntity(
+                    codeProperties.getVerificationUrl()+"/"+verification.getCode(),
+                    entity, Void.class);
+            return response.getStatusCode();
+        } catch (HttpStatusCodeException ex) {
+            return ex.getStatusCode();
+        } catch (RestClientException ex) {
+            return HttpStatus.INTERNAL_SERVER_ERROR;
+        }
     }
 }
 ```
 
-### 5.2.4 使用 SSL/TLS 认证机制
+上面的代码中需要讲解的比较多，我们分成几部分来看。
 
-### 5.2.5 基于密码和基于认证的鉴权问题
+## 登录
 
-### 5.2.6 测试验证 API
-
-接下来，我们就可以看看我们的成果了，首先注册一个用户 `peng2` ，很完美的注册成功了
-
-![注册用户][38]
-
-然后在 `/auth` 中取得 `token` ，也很成功
-
-![取得 token][39]
-
-不使用 `token` 时，访问 `/users` 的结果，不出意料的失败，提示未授权。
-
-![不使用 token 访问 users 列表][40]
-
-使用 `token` 时，访问 `/users` 的结果，虽然仍是失败，但这次提示访问被拒绝，意思就是虽然你已经得到了授权，但由于你的会员级别还只是普卡会员，所以你的请求被拒绝。
-
-![image_1bas22va52vk1rj445fhm87k72a.png-156.9kB][41]
-
-接下来我们访问 `/users/?username=peng2`，竟然可以访问啊
-
-![访问自己的信息是允许的][42]
-
-这是由于我们为这个方法定义的权限就是：拥有 ADMIN 角色或者是当前用户本身。Spring Security 真是很方便，很强大。
+登录对应的 API 路径是 `/api/auth/login` ，我们采用 `Post` 方式进行。 `userRepo.findOneByLogin` 返回的是一个 `Optional<User>` ，也就是可能为空， `Optional` 这个 Java 8 带来的新特性很有一些函数式编程的感觉（包括 Java 8 提供的 Stream 也是这样）。和传统的编程方式不太一样，需要一些思维上的转换，一个函数基本要做的事情很简单，但需要转换的思路时要把函数串起来，也就是前一个函数的输出作为后一个的输入。 下面代码中 `...map...orElseThrow` 就是这种感觉。 `map` 中的 `user -> {...}` 是一个 lamda 表达式，也就是一个函数。 `orElseThrow` 中的 `LoginNotFoundException::new` 是一个语法糖，相当于 `_ -> { return new MobileNotFoundException();}` ， 但在只有一个语句时可以简写成 `LoginNotFoundException::new` 。这里面还有一个自定义的异常 `InvalidPasswordException` ，我们放到后面统一讲异常处理，这里先跳过。
 
 ```java
-@PostAuthorize("returnObject.username == principal.username or hasRole('ROLE_ADMIN')")
-    @RequestMapping(value = "/",method = RequestMethod.GET)
-    public User getUserByUsername(@RequestParam(value="username") String username) {
-        return repository.findByUsername(username);
+@PostMapping(value = "/auth/login")
+public User login(@RequestBody final Auth auth) {
+    log.debug("REST 请求 -- 将对用户: {} 执行登录鉴权", auth);
+    return userRepo.findOneByLogin(auth.getLogin())
+            .map(user -> {
+                if (user.getPassword().equals(auth.getPassword())) {
+                    throw new InvalidPasswordException();
+                }
+                return user;
+            })
+            .orElseThrow(LoginNotFoundException::new);
+}
+```
+
+## 注册
+
+注册对应的 API 路径是 `/api/auth/register` ，同样采用 `Post` 方式进行。注意到 `login` 方法返回的是一个领域对象类型 `User` ，但 `register` 方法返回的却是 `ResponseEntity<User>` ，那么这个 `ResponseEntity` 和前面的 `User` 有什么区别呢？`ResponseEntity` 是完整的一个 Response ，它可以让你控制返回的状态码，返回的对象形式的等等，比如 `ResponseEntity.ok(userRepo.save(user))` 相当于 `ResponseEntity.ok().body(userRepo.save(user))` 。所以如果你确定有要对返回的结果做不同于 Spring 默认的操作的话，可以使用 `ResponseEntity` 。
+
+```java
+@PostMapping("/auth/register")
+public ResponseEntity<User> register(@RequestBody User user) {
+    log.debug("REST 请求 -- 注册用户: {} ", user);
+    if (userRepo.findOneByLogin(user.getLogin()).isPresent()) {
+        throw new LoginExistedException();
     }
+    if (userRepo.findOneByMobile(user.getMobile()).isPresent()) {
+        throw new MobileExistedException();
+    }
+    if (userRepo.findOneByEmail(user.getEmail()).isPresent()) {
+        throw new EmailExistedException();
+    }
+    return ResponseEntity.ok(userRepo.save(user));
+}
 ```
 
-## 跨域解决方案 -- CORS
+## 忘记密码第一步验证手机
 
-前面我们初步做出了一个可以实现受保护的 REST API ，但是我们没有涉及一个前端领域很重要的问题，那就是 **跨域请求**（ `cross-origin HTTP request` ）。先来回顾一些背景知识：
+这个方法前多了一个注解 `@ResponseStatus(value = HttpStatus.OK)` 用来以注解形式提供返回的状态码，但如果是 `HttpStatus.OK` 这种，不加也一样，因为默认就是 `OK` ，所以在你不想返回 200 OK 时，又不想使用 `ResponseEntity` 的情况下，可以这样注解达成目的。
 
-### 什么是跨域？
+另外一个有意思的点是，由于 Java 不是动态语言，所以不可能构建一个临时对象，但是很多时候我们的 API 返回的就是一个简单的字符串，比如
 
-> 定义：当我们从本身站点请求不同域名或端口的服务所提供的资源时，就会发起跨域请求。
-
-例如最常见的我们很多的 `css` 样式文件是会链接到某个公共 CDN 服务器上，而不是在本身的服务器上，这其实就是典型的一个跨域请求。但浏览器由于安全原因限制了在脚本（ `script` ）中发起的跨域 HTTP 请求。也就是说 `XMLHttpRequest` 和 `Fetch` 等是遵循“同源规则”的，即只能访问自己服务器的指定端口的资源（同一服务器不同端口也会视为跨域）。但这种限制在今天，我们的应用需要访问多种外部 API 或资源的时候就不能满足开发者的需求了，因此就产生了若干对于跨域的解决方案， `JSONP` 是其中一种，但在今天来看主流的更彻底的解决方案是 `CORS`  -- `Cross-Origin Resource Sharing` 。
-
-### 跨域资源共享（ CORS ）
-
-这种机制将跨域的访问控制权交给服务器，这样可以保证安全的跨域数据传输。现代浏览器一般会将 CORS 的支持封装在 HTTP API 之中（ 比如 `XMLHttpRequest` 和 `Fetch` ），这样可以有效控制使用跨域请求的风险，因为你绕不过去，总得要使用 API 吧。
-
-概括来说，这个机制是增加一系列的 HTTP 头来让服务器可以描述哪些源是允许使用浏览器来访问资源的。而且对于简单的请求和复杂请求，处理机制是不一样的。
-
-简单请求仅允许三个 HTTP 方法：GET，POST 以及 HEAD ，另外只能支持若干 header 参数： `Accept` ， `Accept-Language` ， `Content-Language` ， `Content-Type` （值只能是 `application/x-www-form-urlencoded`、`multipart/form-data` 和 `text/plain`）， `DPR` ， `Downlink` ， `Save-Data` ， `Viewport-Width` 和  `Width` 。
-
-对于简单请求来说，比如下面这样一个简单的 GET 请求：从 `http://me.domain` 发起到 `http://another.domain/data/blablabla` 的资源请求
-
-```
-GET /data/blablabla/ HTTP/1.1
-// 请求的域名
-Host: another.domain
-...//省略其它部分，重点是下面这句，说明了发起请求者的来源
-Origin: http://me.domain
+```json
+{
+    "message": "hello"
+}
 ```
 
-应用了 CORS 的对方服务器返回的响应应该像下面这个样子，当然这里 `Access-Control-Allow-Origin: *` 中的 `*` 表示任何网站都可以访问该资源，如果要限制只能从 `me.domain` 访问，那么需要改成  `Access-Control-Allow-Origin: http://me.domain`
-
-```txt
-HTTP/1.1 200 OK
-...//省略其它部分
-Access-Control-Allow-Origin: *
-...//省略其它部分
-Content-Type: application/json
-```
-
-那么对于复杂请求怎么办呢？这需要一次预检请求和一次实际的请求，也就是说需要两次和对方服务器的请求/响应。预检请求是以 OPTION 方法进行的，因为 OPTION 方法不会改变任何资源，所以这个预检请求是安全的，它的职责在于发送实际请求将会使用的 HTTP 方法以及将要发送的 HEADER 中将携带哪些内容，这样对方服务器可以根据预检请求的信息决定是否接受。
-
-```txt
-// 预检请求
-OPTIONS /resources/post/ HTTP/1.1
-Host: another.domain
-...// 省略其它部分
-Origin: http://me.domain
-Access-Control-Request-Method: POST
-Access-Control-Request-Headers: Content-Type
-```
-
-服务器对预检请求的响应如下：
-
-```txt
-HTTP/1.1 200 OK
-// 省略其它部分
-Access-Control-Allow-Origin: http://me.domain
-Access-Control-Allow-Methods: POST, GET, OPTIONS
-Access-Control-Allow-Headers: Content-Type
-Access-Control-Max-Age: 86400
-// 省略其它部分
-Content-Type: text/plain
-```
-
-接下来的正式请求就和上面的简单请求差不多了，就不赘述了。
-
-### Spring Boot 中如何启用 CORS
-
-啰嗦了这么多，终于进入正题，但我一直觉得不能光知其然而不知其所以然，所以各位就忍了吧。加入 CORS 的支持在 Spring Boot 中简单到不忍直视，添加一个配置类即可：
+这种情况下为一个简单的字符串构建一个对象实在有点过于繁琐了，所以我们在下面的代码中 `return "{\"resetKey\": \"" + user.getResetKey() + "\"}";` 返回了一个 `json` 字符串，对的，json 其实本身就是字符串，这种方式对待简单的 json 返回是比较方便的，不用重新封装对象。但是也要注意，不能过度使用这种方式。
 
 ```java
-import org.springframework.boot.web.servlet.FilterRegistrationBean;
+@PostMapping(value = "/auth/mobile")
+@ResponseStatus(value = HttpStatus.OK)
+public String verifyMobile(@RequestBody MobileVerification verification) {
+    log.debug("REST 请求 -- 验证手机号 {} 和短信验证码 {}", verification.getMobile(), verification.getCode());
+    return userRepo.findOneByMobile(verification.getMobile())
+            .map(user -> {
+                val code = verifySmsCode(verification);
+                if (code.value() != 200) {
+                    throw new MobileVerificationFailedException(code.getReasonPhrase());
+                }
+                user.setResetKey(CredentialUtil.generateResetKey());
+                userRepo.save(user);
+                return "{\"resetKey\": \"" + user.getResetKey() + "\"}";
+            })
+            .orElseThrow(MobileNotFoundException::new);
+}
+```
+
+注意在判断验证码的时候，我们使用了一个函数 `verifySmsCode(verification)` ，这个可不是内建函数，是我们自己封装的。这个函数虽然没几行，但是为它准备的周边内容可是不少呢。
+
+```java
+// 还记得这个成员变量码？忘了的话翻到前看看代码
+private final RestTemplate restTemplate;
+// ... 省略其他
+private HttpStatus verifySmsCode(final MobileVerification verification) {
+    val body = new HashMap<String, String>();
+    body.put("mobilePhoneNumber", verification.getMobile());
+    val entity = new HttpEntity<>(body);
+    try {
+        val response = restTemplate.postForEntity(
+            codeProperties.getVerificationUrl()+"/"+verification.getCode(),
+            entity, Void.class);
+        return response.getStatusCode();
+    } catch (HttpStatusCodeException ex) {
+        return ex.getStatusCode();
+    } catch (RestClientException ex) {
+        return HttpStatus.INTERNAL_SERVER_ERROR;
+    }
+}
+```
+
+首先来认识一位新朋友 `RestTemplate` 。我们之前都是提供 API 给客户端，但很多时候我们需要自己充当第三方 API 的客户端，这个时候我们就需要使用 `RestTemplate` 了。那么有的同学会想为什么不把这些工作交给前端，它们本来就是纯客户端啊。交给前端会有几个问题
+
+1. 安全性问题 -- 一般 API 都是有密钥的，而且访问时应该传递这个密钥，如果都放在前端，一旦泄漏就是全部的 key 都泄漏了。但在后端就安全很多，因为前端相对脆弱，后端可以通过操作系统和网络的各种安全手段保证被攻破的可能性降低。
+2. API 地址过多 -- 一般来说客户端只需要面对自己的后端，当然这也不绝对，有的时候客户端也会使用第三方，这个主要看内部的协调。但 API 接口的地址不宜过多是一个基本原则。
+3. 影响范围 -- 如果交给前端管理，那么我们日后要替换某个服务时，就需要从前端到后端全面更改。但如果后端处理，我们可以很大程度上保证接口的兼容性。
+
+### 使用 RestTemplate 发送外部请求
+
+那么书接上回，这个 `RestTemplate` 是怎么得到的呢？我们并没有 `new` 出一个对象来啊。问得好，我们其实是利用了 Spring 的依赖注入特性将这个 `RestTemplate` 以单件构造出来提供给应用使用。所以我们将这个 `restTemplate` 声明成 `private final` 也就是必须的参数，只能通过构造提供初始化。然后使用 `@RequiredArgsConstructor` 提供这样一个构造，这样在 `AuthResource` 中就得到了实例。
+
+接下来我们看看是如何提供这个 `RestTemplate` 实例的，我们在 `api` 包下新建一个 `package` 叫做 config，这个包以后作为我们所有的 Java 配置文件的位置。在下面新建一个 `OutboundRestTemplateConfiguration.java` 。
+
+```java
+package dev.local.gtm.api.config;
+
+import dev.local.gtm.api.interceptor.LeanCloudRequestInterceptor;
+import dev.local.gtm.api.config.propsupport.LeanCloudProperties;
+import lombok.RequiredArgsConstructor;
+import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-import org.springframework.web.filter.CorsFilter;
+import org.springframework.web.client.RestTemplate;
 
+/**
+ * 为应用访问外部 Http Rest API 提供配置
+ *
+ * @author Peng Wang (wpcfan@gmail.com)
+ */
+@RequiredArgsConstructor
 @Configuration
-public class CorsConfig {
+public class OutgoingRestTemplateConfiguration {
+
+    private static final int TIMEOUT = 5000;
+    private final LeanCloudProperties leanCloudProperties;
+
     @Bean
-    public FilterRegistrationBean corsFilter() {
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        CorsConfiguration config = new CorsConfiguration();
-        config.setAllowCredentials(true);
-        // 设置你要允许的网站域名，如果全允许则设为 *
-        config.addAllowedOrigin("http://localhost:4200");
-        // 如果要限制 HEADER 或 METHOD 请自行更改
-        config.addAllowedHeader("*");
-        config.addAllowedMethod("*");
-        source.registerCorsConfiguration("/**", config);
-        FilterRegistrationBean bean = new FilterRegistrationBean(new CorsFilter(source));
-        // 这个顺序很重要哦，为避免麻烦请设置在最前
-        bean.setOrder(0);
-        return bean;
+    public RestTemplate getRestTemplate() {
+        return new RestTemplateBuilder()
+                .setConnectTimeout(TIMEOUT)
+                .interceptors(new LeanCloudRequestInterceptor(leanCloudProperties))
+                .build();
     }
 }
-
 ```
 
-如果我们使用 POSTMAN 访问一下 API，会发现得到一个 `Invalid CORS request` 的响应，因为我们的 API 只授权给了 `localhost:4200`
+这个文件非常简单，我们利用 `RestTemplateBuilder` 构造一个 `RestTemplate` ，并加上了 `@Bean` 注解，这样只要你在应用内声明 `RestTemplate` 类型的成员变量，并提供了构造函数以供注入，系统就会找到这个实例注入进去。这样提供的好处在于我们不需要每次都 new 一个 `RestTemplate` 了，避免了一些消耗，同时为 `RestTemplate` 设置了一些通用的属性，避免团队合作时，每个人使用的参数不统一。
 
-![用 POSTMAN 无法得到请求结果][43]
+### 实现 ClientHttpRequestInterceptor 进行外部请求拦截
 
-当然，如果我们使用 CURL 的话是可以访问的，这是因为 CURL 不是浏览器。
+注意在构造 `RestTemplate` 的时候，我们设置了超时的时间和一个请求拦截器。和 Spring MVC 的拦截器概念类似，只不过 Spring MVC 中的拦截器是拦截进来的请求 ( `incoming` )，而这里我们要拦截的是出去的 `outgoing` 。那么为什么要提供拦截器呢？因为第三方 API 服务往往要求 HTTP Request 的鉴权，一般是在 HTTP Request 的头设置一些鉴权需要的字段。而这个如果交给使用者自己添加，一是重复代码太多，二是一旦第三方更改了接口鉴权方式，代码需要改动时，会影响多个位置。所以我们使用一个拦截器帮我们统一管理。
+
+那么我们看看如何实现，在 `api` 包下面新建一个 `interceptor` 的包，然后在此包下面新建一个 `LeanCloudRequestInterceptor.java` 。
+
+```java
+package dev.local.gtm.api.interceptor;
+
+import dev.local.gtm.api.config.propsupport.LeanCloudProperties;
+import lombok.RequiredArgsConstructor;
+import lombok.val;
+import org.springframework.http.HttpRequest;
+import org.springframework.http.MediaType;
+import org.springframework.http.client.ClientHttpRequestExecution;
+import org.springframework.http.client.ClientHttpRequestInterceptor;
+import org.springframework.http.client.ClientHttpResponse;
+
+import java.io.IOException;
+
+/**
+ * 为 LeanCloud 云服务配置在 Request Header 中写入鉴权信息
+ * 关于 LeanCloud 短信服务的鉴权信息可以参考 <a>https://leancloud.cn/docs/rest_sms_api.html</a>
+ *
+ * @author Peng Wang (wpcfan@gmail.com)
+ */
+@RequiredArgsConstructor
+public class LeanCloudRequestInterceptor implements ClientHttpRequestInterceptor {
+
+    private final LeanCloudProperties leanCloudProperties;
+
+    @Override
+    public ClientHttpResponse intercept(HttpRequest request, byte[] body, ClientHttpRequestExecution execution) throws IOException {
+        if (!request.getURI().getHost().contains("api.lncld.net")){
+            return execution.execute(request, body);
+        }
+        val headers = request.getHeaders();
+        headers.add("X-LC-Id", leanCloudProperties.getAppId());
+        headers.add("X-LC-Key", leanCloudProperties.getAppKey());
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        return execution.execute(request, body);
+    }
+}
+```
+
+这个拦截器中我们我们拦截了向外发送的请求，并检查是否是发往 LeanCloud 的请求（ `request.getURI().getHost().contains("api.lncld.net")` ）。如果是的话，就写入 LeanCloud 要求的鉴权头 `X-LC-Id` 和 `X-LC-Key` ，这部分详细信息可以参考 LeanCloud 的官方文档 <https://leancloud.cn/docs/rest_sms_api.html> 。这样处理后，以后再访问 LeanCloud 时就无需写鉴权信息了，让开发者更聚焦在业务层面。
+
+你可能关注到了，我们漏了一个地方没有讲，这个 `LeanCloudProperties` 是什么鬼？
+
+### 为应用提供外部可配置属性的能力
+
+前面我们提到过在 `application.yml` 或者 `application.properties` 中可以配置很多属性，但你有没有好奇过我们是否可以添加自己属性呢？这个 Spring 是支持的，而且非常之简单，只需要在一个类注解 `@ConfigurationProperties("一级属性.二级属性...")` 就行了。
+
+```java
+package dev.local.gtm.api.config.propsupport;
+
+import lombok.Data;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.stereotype.Component;
+
+/**
+ * 为应用配置 LeanCloud 外部属性
+ *
+ * @author Peng Wang (wpcfan@gmail.com)
+ */
+@Component
+@ConfigurationProperties("app.leancloud")
+@Data
+public class LeanCloudProperties {
+    // 请不要拷贝此处的 appId 和 appKey，这里的是不正确的，请自行申请账号获得自己的 appId 和 appKey
+    private String appId = "pqmXXXXXXXXXXXXXXXX-yyyyyy";
+    private String appKey = "EUXXXXXXXXXXXXXX";
+}
+```
+
+那么我们为 LeanCloud 配置了两个鉴权属性 `appId` 和 `appKey` ，这里要记得赋初始值，因为如果在 `.properties` 或 `.yml` 没有设置的时候，程序也得能运行啊。
+
+当然这样写完之后，我们需要在根项目的 `build.gradle` 中添加一个依赖 `spring-boot-configuration-processor` ，它可以对我们的属性注解 `@ConfigurationProperties` 进行处理。
+
+```groovy
+// 省略
+buildscript {
+    // 省略
+}
+
+allprojects {
+    // 省略
+}
+
+subprojects {
+    // 省略
+    dependencies {
+        optional("org.springframework.boot:spring-boot-devtools")
+        optional("org.projectlombok:lombok")
+        optional("org.springframework.boot:spring-boot-configuration-processor") // <--这里
+        testImplementation("org.springframework.boot:spring-boot-starter-test")
+    }
+    compileJava.dependsOn(processResources)
+}
+```
+
+现在在 Intellij IDEA 中试试看，在 `application.yml` 中敲 `app.` 的时候还有智能提示呢。
+
+![自定义属性的智能提示](/assets/2018-04-19-11-51-20.png)
+
+对 Spring 熟悉的同学可能还知道另一种属性配置的方式，就是 `@Value` 注解了，这两种方式的区别可以看下表。
+
+特性 | `@ConfigurationProperties` | `@Value`
+---|---|---
+宽松绑定 | 是 | 否
+元数据支持 | 是 | 否
+SpEL 表达式支持 | 否 | 是
+
+其中宽松绑定是我翻译的名字，英文是 Relaxed Binding <https://docs.spring.io/spring-boot/docs/current/reference/html/boot-features-external-config.html#boot-features-external-config-relaxed-binding> ，其实就是不严格要求属性的名称和定义的严格一致，比如 `context-path` 可以绑定到 `contextPath` ，`port` 可以绑定到 `PORT` 等，而 `@Value` 是不支持这个宽松绑定的，因此在环境设置的时候，推荐使用 `@ConfigurationProperties` 。此外 `@Value` 也不支持 IDE 的智能提示，因为没有元数据支持。但在有表达式需求时使用 `@Value` 。
+
+你看，围绕这个 `verifyMobile` 我们讲了这么多，但是这些都是为了更灵活、更方便的开发以后的模块而不得不做先期工作。
+
+## 忘记密码第二步重置密码
+
+讲完了第一步，第二步就简单一些。这里面需要指出的是 `ResetKey` ，因为我们的忘记密码是两个操作，现在我们提供两个接口，但存在一个问题，如果用户直接访问第二个接口怎么办？所以我们需要有一个东西可以关联第一步和第二步。怎么做呢？具体来说就是第一步验证成功后生成一个随机数，存储到 `User` 对象中，第二步客户端要将这个随机数和要修改的密码作为参数传递给第二个接口 `/auth/reset`
+
+```java
+@PostMapping(value = "/auth/mobile")
+@ResponseStatus(value = HttpStatus.OK)
+public String verifyMobile(@RequestBody MobileVerification verification) {
+    // 第一步
+    return userRepo.findOneByMobile(verification.getMobile())
+            .map(user -> {
+                // 省略部分代码
+                user.setResetKey(CredentialUtil.generateResetKey()); // <-- 这里
+                // 省略部分代码
+            })
+            .orElseThrow(MobileNotFoundException::new);
+}
+
+@PostMapping("/auth/reset")
+public void resetPassword(@RequestBody KeyAndPassword keyAndPassword) {
+    // 第二步
+    log.debug("REST 请求 -- 重置密码 {}", keyAndPassword);
+    userRepo.findOneByMobile(keyAndPassword.getMobile())
+            .map(user -> {
+                if (!user.getResetKey().equals(keyAndPassword.getResetKey())) { // <-- 这里
+                    throw new ResetKeyNotMatchException();
+                }
+                user.setPassword(keyAndPassword.getPassword());
+                user.setResetKey(null);
+                return userRepo.save(user);
+            })
+            .orElseThrow(LoginNotFoundException::new);
+}
+```
+
+这个随机数的生成我们做成了一个工具类，我们会放到一个工具类的包中，在 api 下面新建一个 `util` 包，然后在此包下新建一个 `CredentialUtil.java` 。这个工具主要生成一个固定长度的随机数，默认是 10 位。
+
+```java
+package dev.local.gtm.api.util;
+
+import lombok.extern.log4j.Log4j2;
+
+import java.util.Random;
+
+@Log4j2
+public class CredentialUtil {
+    private static final int COUNT = 10;
+
+    /**
+     * 生成一个重置密码的随机数，作为激活密钥
+     *
+     * @return 生成的密钥
+     */
+    public static String generateActivationKey() {
+        return randomNumeric();
+    }
+
+    /**
+     * 生成一个重置密码的随机数，作为验证密钥
+     *
+     * @return 生成的密钥
+     */
+    public static String generateResetKey() {
+        return randomNumeric();
+    }
+
+    private static String randomNumeric() {
+        return String.valueOf(new Random()
+                .nextInt((9 * (int) Math.pow(10, CredentialUtil.COUNT - 1)) - 1)
+                + (int) Math.pow(10, CredentialUtil.COUNT - 1));
+    }
+}
+```
+
+## API 的异常处理
+
+异常怎么办，上面抛出那么多，也不解释一下吗？嗯，这个异常属于非常重要的一块，所以我们集中在这里讲。

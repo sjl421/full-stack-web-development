@@ -230,37 +230,29 @@ db.task.find(
 
 但肯定还是不够的，对于开发人员来讲，如果不给可以自定义的方式基本没人会用的，因为总有这样那样的原因会导致我们希望能完全掌控我们的查询或存储过程。
 
+## 自定义 Repository
+
+如果想要完全自定义，那就不能光使用这些内建的接口了。我们需要定义新的接口，并提供具体的实现类，在实现类中就可以采用 `MongoTemplate` 等进行复杂的逻辑和数据处理。
 
 ```java
-package dev.local.gtm.api.repository;
+public interface CustomizedMyRepository {
+  void someCustomMethod(Param param);
+}
+public class CustomizedMyRepositoryImpl implements CustomizedMyRepository {
+  public void someCustomMethod(Param param) {
+    // 自定义方法的实现
+    // 使用 MongoTemplate 进行自定义的复杂操作
+    MongoOperations mongoOps = new MongoTemplate(new MongoClient(), "database");
+    mongoOps.insert(new MyDomain("Blablabla", 123));
+    mongoOps.findOne(new Query(where("Blablabla").is(123)), MyDomain.class);
+    // ... 省略其他部分
+  }
+}
+```
 
-import dev.local.gtm.api.domain.User;
-import org.springframework.cache.annotation.Cacheable;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.mongodb.repository.MongoRepository;
-import org.springframework.data.repository.query.Param;
-import org.springframework.stereotype.Repository;
+然后我们就可以定义我们应用中的 repository ，除了继承内建的接口（下面的 `CrudRepository` ）也继承我们的自定义接口 `CustomizedMyRepository`
 
-import java.util.Optional;
-
-@Repository
-public interface UserRepo extends MongoRepository<User, String> {
-    String USERS_BY_LOGIN_CACHE = "usersByLogin";
-
-    String USERS_BY_MOBILE_CACHE = "usersByMobile";
-
-    String USERS_BY_EMAIL_CACHE = "usersByEmail";
-
-    @Cacheable(cacheNames = USERS_BY_MOBILE_CACHE)
-    Optional<User> findOneByMobile(@Param("mobile") String mobile);
-
-    @Cacheable(cacheNames = USERS_BY_EMAIL_CACHE)
-    Optional<User> findOneByEmail(@Param("email") String email);
-
-    @Cacheable(cacheNames = USERS_BY_LOGIN_CACHE)
-    Optional<User> findOneByLogin(@Param("login") String login);
-
-    Page<User> findAllByLoginNot(Pageable pageable, @Param("login") String login);
+```java
+interface MyDomainRepository extends CrudRepository<MyDomain, Long>, CustomizedMyRepository {
 }
 ```
