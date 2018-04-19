@@ -1,5 +1,13 @@
 # 构建安全的 API 接口
 
+估计很多同学看了之前的登录和注册之后会吐槽，这个实现方式实在是不怎么样啊。是的，前面实现的鉴权方式的缺点有
+
+1. 密码明文存储 -- 这个导致安全性问题就不用多说了。
+2. 并未实现对 API 的保护 -- 换句话说登录与否和能否访问 API 没有关系，所以这是一个假登录。
+3. 没有角色的划分 -- 所有的接口都是一视同仁的，但实际项目中肯定要有各种角色允许访问的接口是不一样的限制。
+
+那么，接下来这节我们就一起学习如何使用 JWT 实现一个基于 `token` 的 API 鉴权方式以及使用 Spring Security 实现给予角色的权限控制。
+
 ## 为什么要保护 API？
 
 通常情况下，把 API 直接暴露出去是风险很大的，不说别的，直接被机器攻击就喝一壶的。那么一般来说，对 API 要划分出一定的权限级别，然后做一个用户的鉴权，依据鉴权结果给予用户开放对应的 API 。目前，比较主流的方案有几种:
@@ -94,7 +102,13 @@ HMACSHA256(
 
 ## JWT的生成和解析
 
-为了简化我们的工作，这里引入一个比较成熟的JWT类库，叫 `jjwt` <https://github.com/jwtk/jjwt> 。这个类库可以用于Java和Android的JWT token的生成和验证。
+为了简化我们的工作，这里引入一个比较成熟的 JWT 类库，叫 `jjwt` <https://github.com/jwtk/jjwt> 。这个类库可以用于 Java 和 Android 的 JWT token 的生成和验证。
+
+首先需要在 `api/build.gradle` 中添加依赖
+
+```groovy
+implementation("io.jsonwebtoken:jjwt:0.9.0")
+```
 
 `JWT` 的生成可以使用下面这样的代码完成：
 
@@ -138,29 +152,76 @@ Claims getClaimsFromToken(String token) {
 
 Spring Security 是一个基于 Spring 的通用安全框架，里面内容太多了，本文的主要目的也不是展开讲这个框架，而是如何利用 Spring Security 和 JWT 一起来完成 API 保护。所以关于 Spring Secruity 的基础内容或展开内容，请自行去官网学习<http://projects.spring.io/spring-security> 。
 
-## 背景知识
+## 权限的设计
+
+### ACL 权限模型
+
+`ACL` 是英文 `Access Control Lists` 的缩写， `ACL` 指的是对于某个数据对象的权限列表，一个 `ACL` 会指出哪些用户或系统进程被授予了对数据对象的访问权限，以及允许什么样的操作。比如文件的 `ACL` 通常是类似 `(ZhangSan: read, write; LiSi: read)` 。
+
+### 基于 RBAC 的权限模型
+
+`RBAC` 是 `Role-Based Access Control` 的英文缩写，翻译过来就是基于角色的访问控制。`RBAC` 认为权限授权实际上是 `Who` 、 `What` 、 `How` 决定的。在 `RBAC` 模型中，`Who` 、 `What` 、 `How` 构成了访问权限三元组，即 `Who` 对 `What` 进行 `How` 的操作。其中 `Who` 是权限的拥有者或主体（如：`User` 、 `Role` ）， `What` 是资源或对象（`Resource` 、 `Class`)
+
+`RBAC` 主要分为四种变化形式：
+
+* 核心模型 `RBAC-0`（ `Core RBAC` ）
+* 角色分层模型 `RBAC-1`（ `Hierarchal RBAC` ）
+* 角色限制模型 `RBAC-2`（ `Constraint RBAC` ）
+* 统一模型 `RBAC-3`（ `Combines RBAC` ）
+
+最重要也是最基本的是 `RBAC-0`，因为这个模型是最小化实现 `RBAC` 权限思想的方式，其他的都是在此基础上的补充和变化。
+
+![RABC 领域模型](/assets/2018-04-07-18-07-32.png)
+
+`RBAC` 和 `ACL` 的区别在于 `RBAC` 将权限分配到对组织有意义的特定操作上而不是分配到底层的数据对象上。举个小例子，ACL 可以用来授予或拒绝某个系统文件的写访问请求，但它不能判断这个文件是怎样被更改的。在 `RBAC` 系统中，一个操作可以是在一个财务系统中“创建一个账簿”或者在一个医疗系统中“执行一个血糖测试”。这些操作的权限分配对组织来讲是有意义的，因为组织内的这些操作是一个基本单位的流程。 `RBAC` 非常适合职责分离的需求，这种需求下经常会要求确保至少 2 个或 2 个以上的人员参与到授权的操作中去。
+
+其实一个最小化的 RBAC 模型和 `ACLg` （带分组的 `ACL` ）是等效的。
+
+### 领域对象
+
+从前端来看，有权限要求的、功能上比较简单的登录注册需要的领域对象有两个：用户（ `User` ）和角色（ `Role` ）。
+
+```ts
+import { Role } from './role';
+
+export interface Role {
+  name: string;
+  permissions: string[];
+}
+
+export interface User {
+  id: string;
+  name: string;
+  password?: string;
+  username: string;
+  mobile: string;
+  email: string | null;
+  roles: Role[];
+}
+```
+
 
 如果你的系统有用户的概念的话，一般来说，你应该有一个用户表，最简单的用户表，应该有三列：Id ，Username 和 Password ，类似下表这种
 
-| ID | USERNAME | PASSWORD
-|----|----------|----------
-| 10 | wang | abcdefg
+ ID | USERNAME | PASSWORD
+---|---|---
+ 10 | wang | abcdefg
 
 而且不是所有用户都是一种角色，比如网站管理员、供应商、财务等等，这些角色和网站的直接用户需要的权限可能是不一样的。那么我们就需要一个角色表：
 
-| ID | ROLE
-|----|------
-| 10 | USER
-| 20 | ADMIN
+ ID | ROLE
+---|---
+ 10 | USER
+ 20 | ADMIN
 
 当然我们还需要一个可以将用户和角色关联起来建立映射关系的表。
 
-| USER_ID | ROLE_ID
-|----|------
-| 10 | 10
-| 20 | 20
+ USER_ID | ROLE_ID
+---|---
+ 10 | 10
+ 20 | 20
 
-这是典型的一个关系型数据库的用户角色的设计，由于我们要使用的MongoDB是一个文档型数据库，所以让我们重新审视一下这个结构。
+这是典型的一个关系型数据库的用户角色的设计，由于我们要使用的 MongoDB 是一个文档型数据库，所以让我们重新审视一下这个结构。
 
 这个数据结构的优点在于它避免了数据的冗余，每个表负责自己的数据，通过关联表进行关系的描述，同时也保证的数据的完整性：比如当你修改角色名称后，没有脏数据的产生。
 
@@ -194,27 +255,6 @@ public class User {
 ```
 
 ![在 IDEA 中激活 Annotation Processing](/assets/2018-04-11-10-29-21.png)
-
-当然你可能发现这个类有点怪，只有一些 `field` ，这个简化的能力是一个叫 `lombok` 类库提供的 ，这个很多开发过Android 的童鞋应该熟悉，是用来简化 POJO 的创建的一个类库。简单说一下，采用 `lombok` 提供的 `@Data` 修饰符后可以简写成，原来的一坨 getter 和 setter 以及constructor 等都不需要写了。类似的 `Todo` 可以改写成：
-
-```java
-@Data
-public class Todo {
-    @Id private String id;
-    private String desc;
-    private boolean completed;
-    private User user;
-}
-```
-
-增加这个类库只需在 `build.gradle` 中增加下面这行
-
-```gradle
-dependencies {
-  // 省略其它依赖
-  implementation("org.projectlombok:lombok:${lombokVersion}")
-}
-```
 
 ## 在 SpringBoot 中启用 Spring Security
 
