@@ -102,13 +102,16 @@ buildscript {
 
 apply plugin: com.bmuschko.gradle.docker.DockerRemoteApiPlugin
 
-task createDockerfile(type: com.bmuschko.gradle.docker.tasks.image.Dockerfile) {
+task createDockerfile(type: com.bmuschko.gradle.docker.tasks.image.Dockerfile, dependsOn: ['bootJar']) {
     description = "自动创建 Dockerfile"
     destFile = project.file('src/main/docker/Dockerfile')
     from 'openjdk:8-jdk-alpine'
     volume '/tmp'
     addFile "${project.name}-${project.version}.jar", "app.jar"
-    instruction { 'ENTRYPOINT ["java","-Djava.security.egd=file:/dev/./urandom","-jar","/app.jar"]'}
+    instruction { 'ENTRYPOINT [' +
+            '"java", ' +
+            '"-Djava.security.egd=file:/dev/./urandom", ' +
+            '"-jar","/app.jar"]'}
     maintainer 'Peng Wang "wpcfan@gmail.com"'
 }
 

@@ -98,7 +98,7 @@ User.builder()
   .build();
 ```
 
-此外和 `@Builder` 经常在一起使用的有 `@Singular` ，这个注解标识类中的集合属性，为集合属性生成添加单个元素和集合元素以及清空集合的方法。详细情况可以参考官网的解释 <https://projectlombok.org/features/Builder> 。
+此外和 `@Builder` 经常在一起使用的有 `@Singular` ，这个注解标识类中的集合属性，为集合属性生成添加单个元素的方法。详细情况可以参考官网的解释 <https://projectlombok.org/features/Builder> 。
 
 #### 别烦我了 try...finally
 

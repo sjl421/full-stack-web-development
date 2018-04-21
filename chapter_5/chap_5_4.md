@@ -146,11 +146,7 @@ Claims getClaimsFromToken(String token) {
 }
 ```
 
-`JWT` 本身没啥难度，但安全整体是一个比较复杂的事情， `JWT` 只不过提供了一种基于 `token` 的请求验证机制。但我们的用户权限，对于 API 的权限划分、资源的权限划分，用户的验证等等都不是 `JWT` 负责的。也就是说，请求验证后，你是否有权限看对应的内容是由你的用户角色决定的。所以我们这里要利用 `Spring` 的一个子项目 `Spring Security` 来简化我们的工作。
-
-## 使用 Spring Security 规划角色安全
-
-Spring Security 是一个基于 Spring 的通用安全框架，里面内容太多了，本文的主要目的也不是展开讲这个框架，而是如何利用 Spring Security 和 JWT 一起来完成 API 保护。所以关于 Spring Secruity 的基础内容或展开内容，请自行去官网学习<http://projects.spring.io/spring-security> 。
+`JWT` 本身没啥难度，但安全整体是一个比较复杂的事情， `JWT` 只不过提供了一种基于 `token` 的请求验证机制。但我们的用户权限，对于 API 的权限划分、资源的权限划分，用户的验证等等都不是 `JWT` 负责的。也就是说，请求验证后，你是否有权限看对应的内容是由你的用户角色决定的。所以我们这里要利用 `Spring` 的一个子项目 `Spring Security` 来简化我们的工作。在开始 Spring Security 的工作前，让我们对基于角色的权限的权限做一个简单的背景知识介绍。
 
 ## 权限的设计
 
@@ -171,52 +167,48 @@ Spring Security 是一个基于 Spring 的通用安全框架，里面内容太�
 
 最重要也是最基本的是 `RBAC-0`，因为这个模型是最小化实现 `RBAC` 权限思想的方式，其他的都是在此基础上的补充和变化。
 
-![RABC 领域模型](/assets/2018-04-07-18-07-32.png)
+![RBAC 领域模型](/assets/2018-04-07-18-07-32.png)
 
-`RBAC` 和 `ACL` 的区别在于 `RBAC` 将权限分配到对组织有意义的特定操作上而不是分配到底层的数据对象上。举个小例子，ACL 可以用来授予或拒绝某个系统文件的写访问请求，但它不能判断这个文件是怎样被更改的。在 `RBAC` 系统中，一个操作可以是在一个财务系统中“创建一个账簿”或者在一个医疗系统中“执行一个血糖测试”。这些操作的权限分配对组织来讲是有意义的，因为组织内的这些操作是一个基本单位的流程。 `RBAC` 非常适合职责分离的需求，这种需求下经常会要求确保至少 2 个或 2 个以上的人员参与到授权的操作中去。
+`RBAC` 和 `ACL` 的区别在于 `RBAC` 将权限分配到对组织有意义的特定操作上而不是分配到底层的数据对象上。举个小例子，ACL 可以用来授予或拒绝某个系统文件的写访问请求，但它不能判断这个文件是怎样被更改的。
 
-其实一个最小化的 RBAC 模型和 `ACLg` （带分组的 `ACL` ）是等效的。
+在 `RBAC` 系统中，一个操作可以是在一个财务系统中“创建一个账簿”或者在一个医疗系统中“执行一个血糖测试”。这些操作的权限分配对组织来讲是有意义的，因为组织内的这些操作是一个基本单位的流程。
 
-### 领域对象
+`RBAC` 非常适合职责分离的需求，这种需求下经常会要求确保至少 2 个或 2 个以上的人员参与到授权的操作中去。其实一个最小化的 RBAC 模型和 `ACLg` （带分组的 `ACL` ）是等效的。
 
-从前端来看，有权限要求的、功能上比较简单的登录注册需要的领域对象有两个：用户（ `User` ）和角色（ `Role` ）。
+### 前后端的权限划分
 
-```ts
-import { Role } from './role';
+一个系统前后端都会涉及到权限的处理，但后端的权限是更为重要一些，因为这涉及到系统的数据，也就是说后端如果不设防，那么前端的安全做的再好也没有用。但相反如果后端的安全性设计的较好，即使前端有些漏洞，也不会影响后端的数据。
 
-export interface Role {
-  name: string;
-  permissions: string[];
-}
+通常一个前后端分离的系统，我们需要对后端的 API 进行保护，这种保护有多个层次
 
-export interface User {
-  id: string;
-  name: string;
-  password?: string;
-  username: string;
-  mobile: string;
-  email: string | null;
-  roles: Role[];
-}
-```
+* token -- 这个是最基础的，就是验证你的请求是一个授权请求
+* 角色 -- 即使有了合法的 token ，还要看你的角色是否可以访问某些 API。打个比方， token 类似于小区的大门钥匙，但进入你的家，你还得有家门钥匙。这个角色相当于是你是否有权进入这个房间。
+* 访问频次 (rate limit) -- API 既然开放出来就是让用户使用的，但是我们不欢迎恶意的使用，比如有人写程序对你的鉴权接口进行字典攻击去得到用户的密码，如果没有限制，他们这么试下去，即增加了系统的安全风险，又消耗了系统的大量资源。但是机器和人是有区别的，比如人是不可能在非常短的时间内（比如 `100ms` 内）发送多个请求的，或者正常用户不会在一个短时间内，比如 1 个小时尝试 3000 次同一个接口的请求。
+* 加固请求来源的信任 -- 对于安全性高的系统会要求客户端（ `iOS` 、 `Android` 等）上传自身应用的签名，避免有人反编译程序或者通过抓包等进行分析，重新伪造请求。对于 Web 应用可以通过 CORS 指定某些地址的请求才可以访问
+* 黑名单 -- 这个就是根据各种不正常的用户行为或者已经查明的攻击来源进行拉黑处理
 
+当然还有很多其他的手段，安全是一个大问题，但不是本书的主要目的，所以就不展开讨论了。
 
-如果你的系统有用户的概念的话，一般来说，你应该有一个用户表，最简单的用户表，应该有三列：Id ，Username 和 Password ，类似下表这种
+## 使用 Spring Security 规划角色安全
+
+Spring Security 是一个基于 Spring 的通用安全框架，里面内容太多了，我们的主要目的也不是展开讲这个框架，而是如何利用 Spring Security 和 JWT 一起来完成 API 保护。所以关于 Spring Secruity 的基础内容或展开内容，请自行去官网学习<http://projects.spring.io/spring-security> 。
+
+如果你的系统有用户的概念的话，一般来说，你应该有一个用户表，最简单的用户表，应该有三列： `Id` ， `Username` 和 `Password` ，类似下表这种
 
  ID | USERNAME | PASSWORD
 ---|---|---
  10 | wang | abcdefg
 
-而且不是所有用户都是一种角色，比如网站管理员、供应商、财务等等，这些角色和网站的直接用户需要的权限可能是不一样的。那么我们就需要一个角色表：
+而且不是所有用户都是一种角色，比如网站管理员、供应商、财务等等，这些角色和网站的直接用户需要的权限可能是不一样的。那么我们就需要一个角色表， Spring Security 中的角色的叫 `AUTHORITY` ：
 
- ID | ROLE
+ ID | AUTHORITY
 ---|---
  10 | USER
  20 | ADMIN
 
 当然我们还需要一个可以将用户和角色关联起来建立映射关系的表。
 
- USER_ID | ROLE_ID
+ USER_ID | AUTHORITY_ID
 ---|---
  10 | 10
  20 | 20
@@ -225,236 +217,708 @@ export interface User {
 
 这个数据结构的优点在于它避免了数据的冗余，每个表负责自己的数据，通过关联表进行关系的描述，同时也保证的数据的完整性：比如当你修改角色名称后，没有脏数据的产生。
 
-但是这种事情在用户权限这个领域发生的频率到底有多少呢？有多少人每天不停的改的角色名称？当然如果你的业务场景确实是需要保证数据完整性，你还是应该使用关系型数据库。但如果没有高频的对于角色表的改动，其实我们是不需要这样的一个设计的。在 MongoDB 中我们可以将其简化为
+### MongoDB 中如何实现
+
+在 MongoDB 中我们可以将其简化为有两个文档集合 `user` 和 `authority` ，这两个集合各自是独立的，MongoDB 在数据库层面是没有提供用来定义两个集合关系的操作的，那么我们怎么体现这种关系呢？
+
+一般来说，我们可以在 `User` 对象中设置一个属性，这个属性是一个集合，由 `Authority` 的 Id 组成。当然在 `Authority` 中我们也可以有一个集合，由 `User` 的 Id 构成。这样手动维护了这种关系，但是这个集合最好不要太大，否则会导致这个文档的体积过大，不光是查询性能，增、删、改的性能都会下降。那么我们再来想一下，是否有必要在两个对象中都维护这种关系呢？角色相对的数量是比较少，而且应该也不会增长到很大数字，估计到 100 系统维护人员就得发疯了吧。反过来，有同样角色的用户，这个数量可就不好估计了，如果是面向消费者的系统，那么这个数字就得十万、百万、千万...，所以我们应该只在 `User` 中维护一个 `Authority` 的 Id 组成的集合。
+
+看到这里，估计很多同学会吐槽，这是什么数据库啊，还要手动维护关系。但是大家要注意的是，没有十全十美的方案，所有的方案都是要根据具体场景来做取舍和妥协。大家一定还记得大学里学习数据结构的时候，数组适合查找，但插入和删除就很麻烦。而链表在插入和删除时效率很高，但查找就很麻烦。如果存在一个万能数据结构，我们就不用学习多种数据结构了。
+
+如果你的业务系统中有大量多对多关系，而且对数据完整性有要求的话，那最好还是使用关系型数据库。另外其实一个业务中其实可以有多个数据库，互为补充，在适合的场景使用擅长这个方向存储结构。
+
+再回到我们的数据模型上，现在我们先建立 2 个 `collection` ，一个是 `user` ，一个是 `authority`
 
 ```json
+# User
 {
   _id: <id_generated>
-  username: 'user',
+  username: 'zhangsan',
   password: 'pass',
-  roles: ['USER', 'ADMIN']
+  authorityIds: ['10', '20']
+}
+{
+  _id: <id_generated>
+  username: 'lisi',
+  password: 'pass',
+  authorityIds: ['10']
+}
+# Authority
+{
+  _id: '10',
+  name: 'USER'
+}
+{
+  _id: '20',
+  name: 'ADMIN'
 }
 ```
 
-基于以上考虑，我们重构一下 `User` 类，
+如果我们希望列出角色为 `USER` 的用户，可以通过以下查询得到
 
-```java
-@Data
-public class User {
-    @Id
-    private String id;
+```js
+db.user.find({
+    authorityIds: "10"
+})
+```
 
-    @Indexed(unique=true, direction= IndexDirection.DESCENDING, dropDups=true)
-    private String username;
+当然在 MongoDB 3.2 以上版本中，增加了类似 `join` 的功能，比如你可以在 `aggregate` 的 `pipeline` 中使用 `$lookup` 去关联两个 `collection` ，为什么说是类似呢，因为实际上 MongoDB 做的动作是关联了两个大文件，做了两层循环，外层是 `db.xxx` 的这个 `xxx collection` ，内层是要关联的那个 `collection` ，一旦发现符合关联条件的数据就丢到外层的数组中。所以如果是两个非常大数据量的 `collection` 做关联，请首先一定要做索引，其次尽可能利用 `$match` 和 `$project` 减小数据量。而且不要因为有了这个类似 `join` 的功能就按照关系型数据库的经验来做，关于 `$lookup` 推荐大家看 MongoDB 官方团队的解释，虽然是个英文版，但讲的非常清晰。 <https://www.mongodb.com/presentations/doing-joins-in-mongodb-best-practices-for-using-lookup>
 
-    private String password;
-    private String email;
-    private Date lastPasswordResetDate;
-    private List<String> roles;
+我们在 MongoDB 中可以根据下面的 json 建立 User 和 Authority
+
+```json
+// Authority
+{
+    "_id" : ObjectId("5ad88524b78ca780560ac3aa"),
+    "name" : "USER"
+}
+{
+    "_id" : ObjectId("5ad8852fb78ca780560ac3ab"),
+    "name" : "ADMIN"
+}
+// User
+{
+    "_id" : ObjectId("5ad8853db78ca780560ac3ac"),
+    "username" : "zhangsan",
+    "password" : "pass",
+    "authorityIds" : [
+        ObjectId("5ad88524b78ca780560ac3aa")
+    ]
+}
+{
+    "_id" : ObjectId("5ad885c2b78ca780560ac3ad"),
+    "username" : "lisi",
+    "password" : "pass",
+    "authorityIds" : [
+        ObjectId("5ad8852fb78ca780560ac3ab"),
+        ObjectId("5ad88524b78ca780560ac3aa")
+    ]
 }
 ```
 
-![在 IDEA 中激活 Annotation Processing](/assets/2018-04-11-10-29-21.png)
+然后使用 MongoDB 的 `$lookup` 将所有角色名为 `ADMIN` 的用户列出来。
+
+```js
+db.user.aggregate(
+    [
+        {
+            "$unwind" : {
+                "path" : "$authorityIds"
+            }
+        },
+        {
+            "$lookup" : {
+                "from" : "authority",
+                "localField" : "authorityIds",
+                "foreignField" : "_id",
+                "as" : "authorities"
+            }
+        },
+        {
+            "$match" : {
+                "authorities.name" : "ADMIN"
+            }
+        }
+    ],
+    {
+        "allowDiskUse" : false
+    }
+);
+```
 
 ## 在 SpringBoot 中启用 Spring Security
 
 要在 Spring Boot 中引入 Spring Security 非常简单，修改 `build.gradle`，增加一个引用 `org.springframework.boot:spring-boot-starter-security`：
 
-```gradle
+```groovy
 dependencies {
-  implementation("org.springframework.boot:spring-boot-starter-data-rest")
-  implementation("org.springframework.boot:spring-boot-starter-data-mongodb")
-  implementation("org.springframework.boot:spring-boot-starter-security")
-  implementation("io.jsonwebtoken:jjwt:${jjwtVersion}")
-  implementation("org.projectlombok:lombok:${lombokVersion}")
-  testImplementation("org.springframework.boot:spring-boot-starter-test")
+    implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("io.jsonwebtoken:jjwt:0.9.0")
+    implementation("org.springframework.boot:spring-boot-starter-security")
+    implementation("org.springframework.boot:spring-boot-starter-aop")
+    implementation("org.zalando:problem-spring-web:0.20.1")
+    implementation("com.fasterxml.jackson.module:jackson-module-afterburner")
+    implementation("org.springframework.boot:spring-boot-starter-data-mongodb")
 }
 ```
 
-你可能发现了，我们不只增加了对Spring Security的编译依赖，还增加 `jjwt` 的依赖。
+## 改造用户对象
 
-Spring Security 需要我们实现几个东西，第一个是 `UserDetails` ：这个接口中规定了用户的几个必须要有的方法，所以我们创建一个 `JwtUser` 类来实现这个接口。为什么不直接使用 `User` 类？因为这个 `UserDetails` 完全是为了安全服务的，它和我们的领域类可能有部分属性重叠，但很多的接口其实是安全定制的，所以最好新建一个类：
+为什么需要对用户对象进行改造？其一是我们需要把用户拥有的角色放入 JWT Token 中，传递给客户端，这样客户端可以根据需要决定那些界面功能需要开放给用户还是隐藏起来。其二是 Spring Security 需要我们实现几个东西，第一个是 `UserDetails` ：这个接口中规定了用户的几个必须要有的方法，所以我们要让 `User` 类添加几个属性以满足这个接口。为什么不直接实现 `UserDetails` 类？因为这个 `UserDetails` 完全是为了安全服务的，它和我们的领域类可能有部分属性重叠，但很多的接口其实是为了 Spring Security 的方式定制的，如果以后我们采用别的安全框架的话，这样的紧耦合是不太好的。因此我们需要做一些隔离，但不管采用那个框架，我们自己 User 类确实还需要添加几个属性：
+
+* `activated` -- 标识用户是否激活
+* `resetKey` -- 重置密码密钥
+* `resetDate` -- 重置密码时间
+* `authorities` -- 用户的角色集合
 
 ```java
-public class JwtUser implements UserDetails {
-    private final String id;
-    private final String username;
-    private final String password;
-    private final String email;
-    private final Collection<? extends GrantedAuthority> authorities;
-    private final Date lastPasswordResetDate;
+package dev.local.gtm.api.domain;
 
-    public JwtUser(
-            String id,
-            String username,
-            String password,
-            String email,
-            Collection<? extends GrantedAuthority> authorities,
-            Date lastPasswordResetDate) {
-        this.id = id;
-        this.username = username;
-        this.password = password;
-        this.email = email;
-        this.authorities = authorities;
-        this.lastPasswordResetDate = lastPasswordResetDate;
-    }
-    //返回分配给用户的角色列表
-    @Override
-    public Collection<? extends GrantedAuthority> getAuthorities() {
-        return authorities;
-    }
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import dev.local.gtm.api.config.Constants;
+import lombok.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.DBRef;
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
+
+import javax.validation.constraints.Email;
+import javax.validation.constraints.NotNull;
+import javax.validation.constraints.Pattern;
+import javax.validation.constraints.Size;
+import java.io.Serializable;
+import java.time.Instant;
+import java.util.Set;
+
+@Data
+@Builder
+@EqualsAndHashCode(callSuper = false, of = {"id"})
+@ToString(exclude = "authorities")
+@NoArgsConstructor
+@AllArgsConstructor
+@Document(collection = "api_users")
+public class User implements Serializable {
+    private static final long serialVersionUID = 1L;
+
+    @Id
+    private String id;
+
+    @NotNull
+    @Pattern(regexp = Constants.LOGIN_REGEX)
+    @Size(min = 1, max = 50)
+    @Indexed
+    private String login;
 
     @JsonIgnore
-    public String getId() {
-        return id;
-    }
+    @NotNull
+    @Size(min = 60, max = 60)
+    private String password;
+
+    @NotNull
+    @Pattern(regexp = Constants.MOBILE_REGEX)
+    @Size(min = 10, max = 15)
+    private String mobile;
+
+    @Size(max = 50)
+    private String name;
+
+    @Email
+    @Size(min = 5, max = 254)
+    @Indexed
+    private String email;
+
+    @Size(max = 256)
+    private String avatar;
+
+    @Size(max = 20)
+    @Field("reset_key")
+    @JsonIgnore
+    private String resetKey;
+
+    @Field("reset_date") @Builder.Default
+    private Instant resetDate = null;
+
+    @Builder.Default
+    private boolean activated = false;
 
     @JsonIgnore
-    @Override
-    public String getPassword() {
-        return password;
+    @Singular("authority")
+    @DBRef(lazy = true)
+    @Field("authority_ids")
+    private Set<Authority> authorities;
+}
+```
+
+`@Singular("authority")` 这个是和 Lombok 提供的 `@Builder` 配合为 `User` 类增加一个可以单独添加一个角色到集合的方法。而括号中的 `authority` 就是在 `Builder` 中这个方法的名称，一般集合起的属性名都是复数形式（ `authorities` ）， `@Singular("authority")` 就是我们给添加单个元素的方法起个名称，这里就是 `authority` 了。具体的用法如下面代码所示：
+
+```java
+User.builder().authority(new Authority("Blablabla")).build();
+```
+
+我们在 `User` 的 `authorities` 属性上还应用了一个注解 `@DBRef(lazy = true)` ，之前我们提过在 MongoDB 3.2 以上支持类似关系型数据库的多个 collection 的查询，那么这个 `@DBRef` 就类似于标识“外键”的感觉 <https://docs.mongodb.com/manual/reference/database-references>。
+
+* 手动引用 -- 我们手动保存某个文档的 `_id` 到另一个文档中作为引用。应用可以根据这些引用执行新的查询得到想要的数据，一般情况下，这种方式是完全够用的。
+* `DBRef` 是把文档的 `_id` 和 `collection` 名称以及可选的数据库名称一起保存起来。和手动方式类似，这种方式也需要查询两次，很多 MongoDB 的驱动提供了一些工具类，但是这些驱动并不会自动解析 `DBRef` 。可以这么理解， `DBRef` 提供了一种通用的格式来表示文档之间的关系。
+
+值得指出的是 MongoDB 官方并不推荐使用 `DBRef` ，而是推荐尽可能的手动关联。因为通过手动方式有很多情况下你可以避免多次查询，比如除了 `_id` 我们还可以冗余某些字段到文档中，而 `DBRef` 只是保存了 `_id` 。但在这个例子中，角色的数量不会很多，而且我们后面想要提供角色名称的更改功能，所以这里我们还是使用了 `DBRef` 。在实际工作中，请慎重使用 `DBRef` 。
+
+Spring 对于 `DBRef` 也做了一些优化，比如注解中的 `lazy = true` 就是给 DBRef 字段懒加载的特性，只有使用的时候才会去查询，避免无谓的二次查询。
+
+## 构建 JWT token 工具类
+
+那么改造完用户这个领域对象之后，我们需要根据这个用户的信息生成 JWT token，也需要在请求中得到 token 的时候检验这个 token 是否合法，还需要得到这个合法的 token 之后可以解析它。所以呢，我们在 `api` 包下面新建一个 `security` 包，然后在 `security` 下面再建立一个 `jwt` 包，在这个包下面新建 `TokenProvider.java`
+
+```java
+package dev.local.gtm.api.security.jwt;
+
+import dev.local.gtm.api.config.AppProperties;
+import io.jsonwebtoken.*;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.log4j.Log4j2;
+import lombok.val;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.stereotype.Component;
+
+import javax.annotation.PostConstruct;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.stream.Collectors;
+
+/**
+ * Jwt Token 的工具类
+ *
+ * @author Peng Wang (wpcfan@gmail.com)
+ */
+@Log4j2
+@RequiredArgsConstructor
+@Component
+public class TokenProvider {
+
+    private static final String AUTHORITIES_KEY = "auth";
+
+    private String secretKey;
+
+    private long tokenValidityInMilliseconds;
+
+    private final AppProperties appProperties;
+
+    @PostConstruct
+    public void init() {
+        this.secretKey = appProperties.getSecurity().getJwt().getSecret();
+        this.tokenValidityInMilliseconds = 1000 * appProperties.getSecurity().getJwt().getTokenValidityInSeconds();
     }
 
-    @Override
-    public String getUsername() {
-        return username;
+    public String createToken(Authentication authentication) {
+        val authorities = authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .collect(Collectors.joining(","));
+
+        val now = (new Date()).getTime();
+        val validity = new Date(now + this.tokenValidityInMilliseconds);
+
+        return Jwts.builder()
+                .setSubject(authentication.getName())
+                .claim(AUTHORITIES_KEY, authorities)
+                .signWith(SignatureAlgorithm.HS512, secretKey)
+                .setExpiration(validity)
+                .compact();
     }
-    // 账户是否未过期
-    @JsonIgnore
-    @Override
-    public boolean isAccountNonExpired() {
-        return true;
+
+    public Authentication getAuthentication(String token) {
+        val claims = Jwts.parser()
+                .setSigningKey(secretKey)
+                .parseClaimsJws(token)
+                .getBody();
+
+        val authorities =
+                Arrays.stream(claims.get(AUTHORITIES_KEY).toString().split(","))
+                        .map(SimpleGrantedAuthority::new)
+                        .collect(Collectors.toList());
+
+        val principal = new User(claims.getSubject(), "", authorities);
+
+        return new UsernamePasswordAuthenticationToken(principal, token, authorities);
     }
-    // 账户是否未锁定
-    @JsonIgnore
-    @Override
-    public boolean isAccountNonLocked() {
-        return true;
-    }
-    // 密码是否未过期
-    @JsonIgnore
-    @Override
-    public boolean isCredentialsNonExpired() {
-        return true;
-    }
-    // 账户是否激活
-    @JsonIgnore
-    @Override
-    public boolean isEnabled() {
-        return true;
-    }
-    // 这个是自定义的，返回上次密码重置日期
-    @JsonIgnore
-    public Date getLastPasswordResetDate() {
-        return lastPasswordResetDate;
+
+    public boolean validateToken(String authToken) {
+        try {
+            Jwts.parser().setSigningKey(secretKey).parseClaimsJws(authToken);
+            return true;
+        } catch (SignatureException e) {
+            log.info("非法 JWT 签名");
+            log.trace("非法 JWT 签名的 trace: {}", e);
+        } catch (MalformedJwtException e) {
+            log.info("非法 JWT token.");
+            log.trace("非法 JWT token 的 trace: {}", e);
+        } catch (ExpiredJwtException e) {
+            log.info("过期 JWT token");
+            log.trace("过期 JWT token 的 trace: {}", e);
+        } catch (UnsupportedJwtException e) {
+            log.info("系统不支持的 JWT token");
+            log.trace("系统不支持的 JWT token 的 trace: {}", e);
+        } catch (IllegalArgumentException e) {
+            log.info("JWT token 压缩处理不正确");
+            log.trace("JWT token 压缩处理不正确的 trace: {}", e);
+        }
+        return false;
     }
 }
 ```
 
-这个接口中规定的很多方法我们都简单粗暴的设成直接返回某个值了，这是为了简单起见，你在实际开发环境中还是要根据具体业务调整。当然由于两个类还是有一定关系的，为了写起来简单，我们写一个工厂类来由领域对象创建 `JwtUser`，这个工厂就叫 `JwtUserFactory` 吧：
+这个文件提供了三个方法
+
+* `createToken` -- sub 设为用户的登录名， `auth` 为其拥有的角色（数组形式），当然我们可以再放一些其他信息进去，比如用户的姓名等。
+  * token 中的信息如果是客户端常用的信息就可以减少客户端对 API 的请求频次和数量。但不要在 token 中放入敏感的信息，因为即使没有签名也能解开 token 中的其他信息。
+  * 在这个方法中我们还设置了过期时间，一般的规则是 token 的生命周期不要太长，比如一般不要给一个几个月或一年都有效的 token，测试目的除外。实际工作中都是设一个几个小时有效的 token。
+* `getAuthentication` -- 使用签名解析 JWT token ，取出相关信息形成 Spring Security 中的 `UsernamePasswordAuthenticationToken` ，Spring Security 根据这个去判断用户是否已经鉴权。
+  * 值得注意的是，虽然叫做 `UsernamePasswordAuthenticationToken` ，但我们构造的时候使用了 token 作为 password 参数。换句话说如果 token 合法，我们就认为这个用户是已登录的用户。
+  * 那么为什么我们方法定义中写返回应该是 `Authentication` ，但实际返回的是 `UsernamePasswordAuthenticationToken` ？因为 `UsernamePasswordAuthenticationToken` 实现了 `Authentication` 接口。
+* `validateToken` -- 验证 token 是否合法
+
+大家可能留意到了，我们使用了 `AppProperties` ，而且似乎为它添加了几个属性，是的，我们为应用属性添加了 `app.security.authorization` 和 `app.security.jwt` 。
+
+* `app.security.authorization` -- 用于设置授权相关的属性
+  * `app.security.authorization.header` -- 在 Http Request 的头当中写的授权信息的键值，也就是 `Authorization: Bearer xxxx(token)` 中 `Authorization` 位置的这个字符串，默认的标准是 `Authorization` ，但也可以允许设置成别的字符串。
+* `app.security.jwt` -- 设置 JWT 相关属性
+  * `app.security.jwt.secret` -- 设置加密的密钥，这个千万要保存好，否则就是大门洞开了。
+  * `app.security.jwt.tokenValidityInSeconds` -- 设置有效期，默认给出值是 7200 秒，也就是 2 个小时。
+  * `app.security.jwt.tokenPrefix` -- 就是 `Authorization: Bearer xxxx(token)` 中 `Bearer` 和空格这个字符串
 
 ```java
-public final class JwtUserFactory {
+@Value
+@Component
+@ConfigurationProperties(prefix = "app")
+public class AppProperties {
 
-    private JwtUserFactory() {
-    }
+    // 省略其他部分
+    private final Security security = new Security();
+    // 省略其他部分
+    @Data
+    public static class Security {
+        private final Jwt jwt = new Jwt();
+        private final Authorization authorization = new Authorization();
 
-    public static JwtUser create(User user) {
-        return new JwtUser(
-                user.getId(),
-                user.getUsername(),
-                user.getPassword(),
-                user.getEmail(),
-                mapToGrantedAuthorities(user.getRoles()),
-                user.getLastPasswordResetDate()
-        );
-    }
+        @Data
+        public static class Authorization {
+            private String header = "Authorization";
+        }
 
-    private static List<GrantedAuthority> mapToGrantedAuthorities(List<String> authorities) {
-        return authorities.stream()
-                .map(SimpleGrantedAuthority::new)
-                .collect(Collectors.toList());
-    }
-}
-```
-
-第二个要实现的是 `UserDetailsService`，这个接口只定义了一个方法 `loadUserByUsername`，顾名思义，就是提供一种从用户名可以查到用户并返回的方法。注意，不一定是数据库哦，文本文件、xml文件等等都可能成为数据源，这也是为什么 Spring 提供这样一个接口的原因：保证你可以采用灵活的数据源。接下来我们建立一个 `JwtUserDetailsServiceImpl` 来实现这个接口。
-
-```java
-@Service
-public class JwtUserDetailsServiceImpl implements UserDetailsService {
-    @Autowired
-    private UserRepository userRepository;
-
-    @Override
-    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        User user = userRepository.findByUsername(username);
-
-        if (user == null) {
-            throw new UsernameNotFoundException(String.format("No user found with username '%s'.", username));
-        } else {
-            return JwtUserFactory.create(user);
+        @Data
+        public static class Jwt {
+            private String secret = "myDefaultSecret";
+            private long tokenValidityInSeconds = 7200;
+            private String tokenPrefix = "Bearer ";
         }
     }
 }
-
 ```
 
-为了让 Spring 可以知道我们想怎样控制安全性，我们还需要建立一个安全配置类 `WebSecurityConfig`：
+## 如何检查任何请求的授权信息？
+
+有了工具类，我们接下来怎么办，在所有的 API Controller 中应用这个工具进行检查？显然不行，重复代码也太多了吧，我们还是利用 Filter ，这样所有的请求进来时就都被 Filter 检查和处理了。
 
 ```java
+package dev.local.gtm.api.security.jwt;
+
+import dev.local.gtm.api.config.AppProperties;
+import lombok.RequiredArgsConstructor;
+import lombok.val;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.util.StringUtils;
+import org.springframework.web.filter.GenericFilterBean;
+
+import javax.servlet.FilterChain;
+import javax.servlet.ServletException;
+import javax.servlet.ServletRequest;
+import javax.servlet.ServletResponse;
+import javax.servlet.http.HttpServletRequest;
+import java.io.IOException;
+
+@RequiredArgsConstructor
+public class JWTFilter extends GenericFilterBean {
+
+    private final TokenProvider tokenProvider;
+    private final AppProperties appProperties;
+
+    @Override
+    public void doFilter(ServletRequest servletRequest, ServletResponse servletResponse, FilterChain filterChain)
+            throws IOException, ServletException {
+        val httpServletRequest = (HttpServletRequest) servletRequest;
+        val jwt = getToken(httpServletRequest);
+        if (StringUtils.hasText(jwt) && this.tokenProvider.validateToken(jwt)) {
+            val authentication = this.tokenProvider.getAuthentication(jwt);
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+        }
+        filterChain.doFilter(servletRequest, servletResponse);
+    }
+
+    private String getToken(HttpServletRequest request){
+        val bearerToken = request.getHeader(appProperties.getSecurity().getAuthorization().getHeader());
+        val prefix = appProperties.getSecurity().getJwt().getTokenPrefix();
+        if (StringUtils.hasText(bearerToken) && bearerToken.startsWith(prefix)) {
+            return bearerToken.substring(prefix.length(), bearerToken.length());
+        }
+        val jwt = request.getParameter(appProperties.getSecurity().getAuthorization().getHeader());
+        if (StringUtils.hasText(jwt)) {
+            return jwt;
+        }
+        return null;
+    }
+}
+```
+
+这个 Filter 做的事情就是当请求进来后，我们先从这个 Request 的头部把授权信息取出来，然后返回解析后的 JWT token 。如果这个 token 是合法的，那么我们就使用工具类得到 Spring Security 中的鉴权 `val authentication = this.tokenProvider.getAuthentication(jwt)` 。最后在 Spring Security 的安全上下文中设置这个鉴权信息 `SecurityContextHolder.getContext().setAuthentication(authentication)` 。
+
+多说两句 `SecurityContextHolder` 是一个关联 `SecurityContext` （安全上下文） 和当前线程的类，一般常用就是使用 `SecurityContextHolder` 的 `getContext()` 得到 `SecurityContext` 。那么这个 `SecurityContext` 又是个什么东东呢？看一下 Spring Security 的源码，哈哈，原来就是存和取 `Authentication` 鉴权对象的啊。
+
+```java
+// 摘自 Spring Security 项目，为阅读方便，只保留部分代码
+public interface SecurityContext extends Serializable {
+
+    Authentication getAuthentication();
+
+    void setAuthentication(Authentication authentication);
+}
+```
+
+那么究竟这个 `Authentication` 里面有什么？又可以做到什么呢？还是看源码更清晰
+
+```java
+// 摘自 Spring Security 项目，为阅读方便，只保留部分代码
+public interface Authentication extends Principal, Serializable {
+    // 得到角色集合
+    Collection<? extends GrantedAuthority> getAuthorities();
+
+    // 得到密码或者起到密码作用的值，比如 token
+    Object getCredentials();
+
+    // 简单理解就是得到用户信息
+    Object getDetails();
+
+    // 简单理解就是得到用户名，实际 Principal 的概念要更抽象一些
+    Object getPrincipal();
+
+    // 返回是否已鉴权
+    boolean isAuthenticated();
+
+    // 设置是否已鉴权
+    void setAuthenticated(boolean isAuthenticated) throws IllegalArgumentException;
+}
+```
+
+这些知识对于更好的理解 Spring Security 是很有帮助的，希望大家可以细致做一些功课，但这里我们就只是略作介绍了。
+
+我们需要回头接着说 Filter ，这个 Filter 建好之后，还得配置到 Spring 中去，否则 Spring 也不知道应该怎么应用这个 Filter 。在 Spring 中 Filter 是有顺序的，而且这个顺序很重要，因为如果你的 Filter 在不适合的位置，那么有可能你的 Filter 本来预期的效果会被其他 Filter 更改掉了。
+
+所以我们在 `jwt` 包中新建一个 `JWTConfigurer.java` ，这个类里面只做了一件事，就是把刚刚的 Filter 加到 Spring Security 内建的 `UsernamePasswordAuthenticationFilter` 之前。也就是说在 Spring Security 内建的鉴权 Filter 开始之前就完成了我们自己的鉴权。
+
+```java
+package dev.local.gtm.api.security.jwt;
+
+import dev.local.gtm.api.config.AppProperties;
+import lombok.RequiredArgsConstructor;
+import lombok.val;
+import org.springframework.security.config.annotation.SecurityConfigurerAdapter;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.web.DefaultSecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.stereotype.Component;
+
+@RequiredArgsConstructor
+@Component
+public class JWTConfigurer extends SecurityConfigurerAdapter<DefaultSecurityFilterChain, HttpSecurity> {
+
+    private final TokenProvider tokenProvider;
+    private final AppProperties appProperties;
+
+    @Override
+    public void configure(HttpSecurity http) {
+        val customFilter = new JWTFilter(tokenProvider, appProperties);
+        http.addFilterBefore(customFilter, UsernamePasswordAuthenticationFilter.class);
+    }
+}
+```
+
+## 得到用户信息
+
+刚刚我们提到过在 `Authentication` 中可以得到用户信息，这个信息其实是我们自己可以定义的信息，于是接下来要实现的是 `UserDetailsService`，这个接口只定义了一个方法 `loadUserByUsername`，顾名思义，就是提供一种从用户名可以查到用户并返回的方法。注意，不一定是数据库哦，文本文件、xml 文件等等都可能成为数据源，这也是为什么 Spring 提供这样一个接口的原因：保证你可以采用灵活的数据源。接下来我们建立一个 `UserDetailsServiceImpl` 来实现这个接口。
+
+```java
+package dev.local.gtm.api.security;
+
+import dev.local.gtm.api.config.Constants;
+import dev.local.gtm.api.domain.User;
+import dev.local.gtm.api.repository.UserRepo;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.log4j.Log4j2;
+import lombok.val;
+import org.hibernate.validator.internal.constraintvalidators.hv.EmailValidator;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.stereotype.Component;
+
+import java.util.Locale;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
+/**
+ * 用户信息服务的具体实现
+ *
+ * @author Peng Wang (wpcfan@gmail.com)
+ */
+@Log4j2
+@RequiredArgsConstructor
+@Component
+public class UserDetailsServiceImpl implements UserDetailsService {
+
+    private final UserRepo userRepo;
+
+    /**
+     * 通过数据库加载用户信息
+     * @param login 用户名
+     * @return 返回 Spring Security User
+     */
+    @Override
+    public UserDetails loadUserByUsername(final String login) {
+        log.debug("正在对用户名为 {} 的用户进行鉴权", login);
+
+        if (new EmailValidator().isValid(login, null)) {
+            val userByEmailFromDatabase = userRepo.findOneByEmailIgnoreCase(login);
+            return userByEmailFromDatabase.map(user -> createSpringSecurityUser(login, user))
+                    .orElseThrow(() -> new UsernameNotFoundException("系统中不存在 email 为 " + login + " 的用户"));
+        }
+
+        if (Pattern.matches(Constants.MOBILE_REGEX, login)) {
+            val userByMobileFromDatabase = userRepo.findOneByMobile(login);
+            return userByMobileFromDatabase.map(user -> createSpringSecurityUser(login, user))
+                    .orElseThrow(() -> new UsernameNotFoundException("系统中不存在手机号为 " + login + " 的用户"));
+        }
+
+        String lowercaseLogin = login.toLowerCase(Locale.ENGLISH);
+        val userByLoginFromDatabase = userRepo.findOneByLogin(lowercaseLogin);
+        return userByLoginFromDatabase.map(user -> createSpringSecurityUser(lowercaseLogin, user))
+                .orElseThrow(() -> new UsernameNotFoundException("User " + lowercaseLogin + " was not found in the database"));
+
+    }
+
+    /**
+     * 通过应用的用户领域对象创建 Spring Security 的用户
+     *
+     * 这里有两个 User ，为避免混淆，对于 Spring Security 的 User 采用 Full Qualified Name
+     * @param lowercaseLogin 小写的用户登录名
+     * @param user 领域对象
+     * @return Spring Security User
+     * @see org.springframework.security.core.userdetails.User
+     */
+    private org.springframework.security.core.userdetails.User createSpringSecurityUser(String lowercaseLogin, User user) {
+        if (!user.isActivated()) {
+            throw new UserNotActivatedException("用户 " + lowercaseLogin + " 没有激活");
+        }
+        val grantedAuthorities = user.getAuthorities().stream()
+                .map(authority -> new SimpleGrantedAuthority(authority.getName()))
+                .collect(Collectors.toList());
+        return new org.springframework.security.core.userdetails.User(user.getLogin(),
+                user.getPassword(),
+                grantedAuthorities);
+    }
+}
+```
+
+## 配置 Spring Security
+
+做了这么多前期工作，最后还是得让 Spring Security 我们想如何配置安全，我们还需要建立一个安全配置类 `SecurityConfig`：
+
+```java
+package dev.local.gtm.api.config;
+
+import dev.local.gtm.api.security.AuthoritiesConstants;
+import dev.local.gtm.api.security.jwt.JWTConfigurer;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.BeanInitializationException;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
+import org.springframework.security.config.annotation.method.configuration.EnableGlobalMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.builders.WebSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.zalando.problem.spring.web.advice.security.SecurityProblemSupport;
+
+import javax.annotation.PostConstruct;
+
+@RequiredArgsConstructor
 @Configuration
 @EnableWebSecurity
-@EnableGlobalMethodSecurity(prePostEnabled = true)
-public class WebSecurityConfig extends WebSecurityConfigurerAdapter{
+@EnableGlobalMethodSecurity(prePostEnabled = true, securedEnabled = true)
+@Import(SecurityProblemSupport.class)
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
 
-    // Spring会自动寻找同样类型的具体类注入，这里就是JwtUserDetailsServiceImpl了
-    @Autowired
-    private UserDetailsService userDetailsService;
+    private final AuthenticationManagerBuilder authenticationManagerBuilder;
 
-    @Autowired
-    public void configureAuthentication(AuthenticationManagerBuilder authenticationManagerBuilder) throws Exception {
-        authenticationManagerBuilder
-                // 设置UserDetailsService
-                .userDetailsService(this.userDetailsService)
-                // 使用BCrypt进行密码的hash
-                .passwordEncoder(passwordEncoder());
+    private final UserDetailsService userDetailsService;
+
+    private final SecurityProblemSupport problemSupport;
+
+    private final JWTConfigurer jwtConfigurer;
+
+    @PostConstruct
+    public void init() {
+        try {
+            authenticationManagerBuilder
+                    .userDetailsService(userDetailsService)
+                    .passwordEncoder(passwordEncoder());
+        } catch (Exception e) {
+            throw new BeanInitializationException("安全配置失败", e);
+        }
     }
-    // 装载BCrypt密码编码器
+
+    @Override
+    @Bean
+    public AuthenticationManager authenticationManagerBean() throws Exception {
+        return super.authenticationManagerBean();
+    }
+
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
     @Override
-    protected void configure(HttpSecurity httpSecurity) throws Exception {
-        httpSecurity
-                // 由于使用的是JWT，我们这里不需要csrf
-                .csrf().disable()
+    public void configure(WebSecurity web) {
+        web.ignoring()
+                .antMatchers(HttpMethod.OPTIONS, "/**")
+                .antMatchers("/app/**/*.{js,html}")
+                .antMatchers("/i18n/**")
+                .antMatchers("/content/**")
+                .antMatchers("/swagger-ui/index.html")
+                .antMatchers("/test/**");
+    }
 
-                // 基于token，所以不需要session
-                .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS).and()
-
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http
+                .exceptionHandling()
+                .authenticationEntryPoint(problemSupport)
+                .accessDeniedHandler(problemSupport)
+                .and()
+                .csrf()
+                .disable()
+                .headers()
+                .frameOptions()
+                .disable()
+                .and()
+                .sessionManagement()
+                .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                .and()
                 .authorizeRequests()
-                //.antMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                .antMatchers("/api/auth/**").permitAll()
+                .antMatchers("/api/**").authenticated()
+                .antMatchers("/websocket/tracker").hasAuthority(AuthoritiesConstants.ADMIN)
+                .antMatchers("/websocket/**").permitAll()
+                .antMatchers("/management/health").permitAll()
+                .antMatchers("/management/**").hasAuthority(AuthoritiesConstants.ADMIN)
+                .antMatchers("/v2/api-docs/**").permitAll()
+                .antMatchers("/swagger-resources/configuration/ui").permitAll()
+                .antMatchers("/swagger-ui/index.html").hasAuthority(AuthoritiesConstants.ADMIN)
+                .and()
+                .apply(jwtConfigurer);
 
-                // 允许对于网站静态资源的无授权访问
-                .antMatchers(
-                        HttpMethod.GET,
-                        "/",
-                        "/*.html",
-                        "/favicon.ico",
-                        "/**/*.html",
-                        "/**/*.css",
-                        "/**/*.js"
-                ).permitAll()
-                // 对于获取token的rest api要允许匿名访问
-                .antMatchers("/auth/**").permitAll()
-                // 除上面外的所有请求全部需要鉴权认证
-                .anyRequest().authenticated();
-
-        // 禁用缓存
-        httpSecurity.headers().cacheControl();
     }
 }
 ```
@@ -521,7 +985,7 @@ logging:
 
 ```
 
-我们除了配置了logging的一些东东外，也顺手设置了数据库和http服务的一些配置项，现在我们的服务器会在8090端口监听，而spring data和security的日志在debug模式下会输出到console。
+我们除了配置了 logging 的一些东东外，也顺手设置了数据库和 http 服务的一些配置项，现在我们的服务器会在 8090 端口监听，而 spring data 和 security 的日志在 debug 模式下会输出到 console。
 
 现在启动服务后，访问 `http://localhost:8090` 你可以看到根目录还是正常显示的
 

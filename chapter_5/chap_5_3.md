@@ -63,8 +63,7 @@ public interface UserRepo extends MongoRepository<User, String> {
 ```java
 package dev.local.gtm.api.web.rest;
 
-import dev.local.gtm.api.config.propsupport.SmsCaptchaProperties;
-import dev.local.gtm.api.config.propsupport.SmsCodeProperties;
+import dev.local.gtm.api.config.AppProperties;
 import dev.local.gtm.api.domain.*;
 import dev.local.gtm.api.repository.UserRepo;
 import dev.local.gtm.api.util.CredentialUtil;
@@ -83,6 +82,11 @@ import org.springframework.web.client.RestTemplate;
 
 import java.util.HashMap;
 
+/**
+ * 用户鉴权资源接口
+ *
+ * @author Peng Wang (wpcfan@gmail.com)
+ */
 @Log4j2
 @RestController
 @RequestMapping("/api")
@@ -91,9 +95,10 @@ public class AuthResource {
 
     private final UserRepo userRepo;
     private final RestTemplate restTemplate;
-    private final SmsCaptchaProperties captchaProperties;
-    private final SmsCodeProperties codeProperties;
+    private final AppProperties appProperties;
 
+    @ApiOperation(value = "用户登录鉴权接口",
+            notes = "客户端在 RequestBody 中以 json 传入用户名、密码，如果成功以 json 形式返回该用户信息")
     @PostMapping(value = "/auth/login")
     public User login(@RequestBody final Auth auth) {
         log.debug("REST 请求 -- 将对用户: {} 执行登录鉴权", auth);
@@ -103,7 +108,8 @@ public class AuthResource {
                         throw new InvalidPasswordException();
                     }
                     return user;
-                }).orElseThrow(LoginNotFoundException::new);
+                })
+                .orElseThrow(LoginNotFoundException::new);
     }
 
     @PostMapping("/auth/register")
@@ -123,16 +129,17 @@ public class AuthResource {
 
     @PostMapping(value = "/auth/mobile")
     @ResponseStatus(value = HttpStatus.OK)
-    public void verifyMobile(@RequestBody MobileVerification verification) {
+    public String verifyMobile(@RequestBody MobileVerification verification) {
         log.debug("REST 请求 -- 验证手机号 {} 和短信验证码 {}", verification.getMobile(), verification.getCode());
-        userRepo.findOneByMobile(verification.getMobile())
+        return userRepo.findOneByMobile(verification.getMobile())
                 .map(user -> {
                     val code = verifySmsCode(verification);
                     if (code.value() != 200) {
                         throw new MobileVerificationFailedException(code.getReasonPhrase());
                     }
                     user.setResetKey(CredentialUtil.generateResetKey());
-                    return userRepo.save(user);
+                    userRepo.save(user);
+                    return "{\"resetKey\": \"" + user.getResetKey() + "\"}";
                 })
                 .orElseThrow(MobileNotFoundException::new);
     }
@@ -159,7 +166,7 @@ public class AuthResource {
         body.put("captcha_token", captcha.getToken());
         val entity = new HttpEntity<>(body);
         try {
-            val validateCaptcha = restTemplate.postForObject(captchaProperties.getVerificationUrl(), entity, Captcha.class);
+            val validateCaptcha = restTemplate.postForObject(appProperties.getCaptcha().getVerificationUrl(), entity, Captcha.class);
             if (validateCaptcha == null) {
                 throw new InternalServerErrorException("返回对象为空，无法进行验证");
             }
@@ -178,8 +185,8 @@ public class AuthResource {
         body.put("mobilePhoneNumber", verification.getMobile());
         val entity = new HttpEntity<>(body);
         try {
-            ResponseEntity<Void> response = restTemplate.postForEntity(
-                    codeProperties.getVerificationUrl()+"/"+verification.getCode(),
+            val response = restTemplate.postForEntity(
+                    appProperties.getSmsCode().getVerificationUrl()+"/"+verification.getCode(),
                     entity, Void.class);
             return response.getStatusCode();
         } catch (HttpStatusCodeException ex) {
@@ -278,8 +285,8 @@ private HttpStatus verifySmsCode(final MobileVerification verification) {
     val entity = new HttpEntity<>(body);
     try {
         val response = restTemplate.postForEntity(
-            codeProperties.getVerificationUrl()+"/"+verification.getCode(),
-            entity, Void.class);
+                appProperties.getSmsCode().getVerificationUrl()+"/"+verification.getCode(),
+                entity, Void.class);
         return response.getStatusCode();
     } catch (HttpStatusCodeException ex) {
         return ex.getStatusCode();
@@ -299,13 +306,12 @@ private HttpStatus verifySmsCode(final MobileVerification verification) {
 
 那么书接上回，这个 `RestTemplate` 是怎么得到的呢？我们并没有 `new` 出一个对象来啊。问得好，我们其实是利用了 Spring 的依赖注入特性将这个 `RestTemplate` 以单件构造出来提供给应用使用。所以我们将这个 `restTemplate` 声明成 `private final` 也就是必须的参数，只能通过构造提供初始化。然后使用 `@RequiredArgsConstructor` 提供这样一个构造，这样在 `AuthResource` 中就得到了实例。
 
-接下来我们看看是如何提供这个 `RestTemplate` 实例的，我们在 `api` 包下新建一个 `package` 叫做 config，这个包以后作为我们所有的 Java 配置文件的位置。在下面新建一个 `OutboundRestTemplateConfiguration.java` 。
+接下来我们看看是如何提供这个 `RestTemplate` 实例的，我们在 `api` 包下新建一个 `package` 叫做 config，这个包以后作为我们所有的 Java 配置文件的位置。在下面新建一个 `OutboundRestTemplateConfig.java` 。
 
 ```java
 package dev.local.gtm.api.config;
 
 import dev.local.gtm.api.interceptor.LeanCloudRequestInterceptor;
-import dev.local.gtm.api.config.propsupport.LeanCloudProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
@@ -319,16 +325,16 @@ import org.springframework.web.client.RestTemplate;
  */
 @RequiredArgsConstructor
 @Configuration
-public class OutgoingRestTemplateConfiguration {
+public class OutgoingRestTemplateConfig {
 
     private static final int TIMEOUT = 5000;
-    private final LeanCloudProperties leanCloudProperties;
+    private final AppProperties appProperties;
 
     @Bean
     public RestTemplate getRestTemplate() {
         return new RestTemplateBuilder()
                 .setConnectTimeout(TIMEOUT)
-                .interceptors(new LeanCloudRequestInterceptor(leanCloudProperties))
+                .interceptors(new LeanCloudRequestInterceptor(appProperties))
                 .build();
     }
 }
@@ -345,7 +351,7 @@ public class OutgoingRestTemplateConfiguration {
 ```java
 package dev.local.gtm.api.interceptor;
 
-import dev.local.gtm.api.config.propsupport.LeanCloudProperties;
+import dev.local.gtm.api.config.AppProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.val;
 import org.springframework.http.HttpRequest;
@@ -365,7 +371,7 @@ import java.io.IOException;
 @RequiredArgsConstructor
 public class LeanCloudRequestInterceptor implements ClientHttpRequestInterceptor {
 
-    private final LeanCloudProperties leanCloudProperties;
+    private final AppProperties appProperties;
 
     @Override
     public ClientHttpResponse intercept(HttpRequest request, byte[] body, ClientHttpRequestExecution execution) throws IOException {
@@ -373,8 +379,8 @@ public class LeanCloudRequestInterceptor implements ClientHttpRequestInterceptor
             return execution.execute(request, body);
         }
         val headers = request.getHeaders();
-        headers.add("X-LC-Id", leanCloudProperties.getAppId());
-        headers.add("X-LC-Key", leanCloudProperties.getAppKey());
+        headers.add("X-LC-Id", appProperties.getLeanCloud().getAppId());
+        headers.add("X-LC-Key", appProperties.getLeanCloud().getAppKey());
         headers.setContentType(MediaType.APPLICATION_JSON);
         return execution.execute(request, body);
     }
@@ -440,6 +446,63 @@ subprojects {
 现在在 Intellij IDEA 中试试看，在 `application.yml` 中敲 `app.` 的时候还有智能提示呢。
 
 ![自定义属性的智能提示](/assets/2018-04-19-11-51-20.png)
+
+但是这么一个个的添加感觉有点乱，我们干脆为整个应用建立一个自己的完整的外部属性配置，在 `config` 中新建 `AppProperties.java` ，这样我们就把所有需要配置的统一到这个 `AppProperties` 中管理了。
+
+```java
+package dev.local.gtm.api.config;
+
+import lombok.Data;
+import lombok.Value;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+/**
+ * 为本应用服务提供外部可配置的属性支持
+ *
+ * @author Peng Wang (wpcfan@gmail.com)
+ */
+@Value
+@Component
+@ConfigurationProperties(prefix = "app")
+public class AppProperties {
+
+    private final LeanCloud leanCloud = new LeanCloud();
+    private final SmsCaptcha captcha = new SmsCaptcha();
+    private final SmsCode smsCode = new SmsCode();
+    private final Security security = new Security();
+
+    @Data
+    public static class LeanCloud {
+        // 请注册 LeanCloud 获得自己的应用访问的 appID 和 appKey
+        private String appId = "blablabla";
+        private String appKey = "nahnahnah";
+    }
+
+    @Data
+    public static class SmsCaptcha {
+        // 请注册 LeanCloud 获得自己的应用访问的 URL
+        private String requestUrl = "https://xxx.api.lncld.net/1.1/requestCaptcha";
+        private String verificationUrl = "https://xxx.api.lncld.net/1.1/verifyCaptcha";
+    }
+
+    @Data
+    public static class SmsCode {
+        // 请注册 LeanCloud 获得自己的应用访问的 URL
+        private String requestUrl = "https://xxx.api.lncld.net/1.1/requestSmsCode";
+        private String verificationUrl = "https://xxx.api.lncld.net/1.1/verifySmsCode";
+    }
+
+    @Data
+    public static class Security {
+        private Jwt jwt;
+        @Data
+        public static class Jwt {
+            private String secret = "myDefaultSecret";
+            private long tokenValidityInSeconds = 7200;
+        }
+    }
+}
+```
 
 对 Spring 熟悉的同学可能还知道另一种属性配置的方式，就是 `@Value` 注解了，这两种方式的区别可以看下表。
 
@@ -598,10 +661,56 @@ Problem:
 
 ### 在工程中集成 Problem 类库
 
-我们使用了一个 zalando 团队提供的在 Spring 使用 Problem 的类库  <https://github.com/zalando/problem-spring-web> 。要在我们的工程中使用的话，需要在 `api/build.gradle` 中增加一个依赖
+我们使用了一个 zalando 团队提供的在 Spring 使用 Problem 的类库  <https://github.com/zalando/problem-spring-web> 。要在我们的工程中使用的话，需要在 `api/build.gradle` 中增加如下依赖，由于要使用 Jackson Afterburner 模块作为 `json` 的序列化和反序列化的类库配合 Problem ，所以也添加了 `jackson-module-afterburner` 。在统一异常处理时，我们使用 `@ControllerAdvice` ，需要我们添加 `spring-boot-starter-aop`
 
 ```groovy
 implementation("org.zalando:problem-spring-web:0.20.1")
+implementation("com.fasterxml.jackson.module:jackson-module-afterburner")
+implementation("org.springframework.boot:spring-boot-starter-aop")
+```
+
+为 Problem 配置 Jackson 模块需要在 `config` 下新建 `JacksonConfig.java`
+
+```java
+package dev.local.gtm.api.config;
+
+import com.fasterxml.jackson.module.afterburner.AfterburnerModule;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.zalando.problem.ProblemModule;
+import org.zalando.problem.validation.ConstraintViolationProblemModule;
+
+/**
+ * 为 zalando problem 配置 Jackson
+ *
+ * @author Peng Wang (wpcfan@gmail.com)
+ */
+@Configuration
+public class JacksonConfig {
+    /*
+     * 使用 Jackson Afterburner 模块加速 序列化和反序列化过程
+     */
+    @Bean
+    public AfterburnerModule afterburnerModule() {
+        return new AfterburnerModule();
+    }
+
+    /*
+     * 用于序列化和反序列化 RFC7807 Problem 对象的模块。
+     */
+    @Bean
+    ProblemModule problemModule() {
+        return new ProblemModule();
+    }
+
+    /*
+     * 用于序列化和反序列化 ConstraintViolationProblem 的模块
+     */
+    @Bean
+    ConstraintViolationProblemModule constraintViolationProblemModule() {
+        return new ConstraintViolationProblemModule();
+    }
+}
 ```
 
 ### 构建统一异常处理
