@@ -27,8 +27,8 @@
       "url": "https://github.com/wpcfan"
     },
     "donate": {
-      "wechat": "assets/donate/wechat.png",
-      "alipay": "assets/donate/alipay.png",
+      "wechat": "/assets/donate/wechat.png",
+      "alipay": "/assets/donate/alipay.png",
       "title": "",
       "button": "赏",
       "alipayText": "支付宝打赏",
