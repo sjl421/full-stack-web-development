@@ -813,7 +813,7 @@ public class UserDetailsServiceImpl implements UserDetailsService {
 
 ## 配置 Spring Security
 
-做了这么多前期工作，最后还是得让 Spring Security 我们想如何配置安全，我们还需要建立一个安全配置类 `SecurityConfig`：
+做了这么多前期工作，最后还是得让 Spring Security 我们想如何配置安全，我们还需要建立一个安全配置类 `SecurityConfig` ，这里我们会把 `PasswordEncoder` 和 `AuthenticationManager` 以 `Bean` 的形式提供。在 `void configure(WebSecurity web)` 方法中指定哪些资源是 Spring Security 忽略的，也就是不做鉴权，一般是静态资源。在 `void configure(HttpSecurity http)` 中设置具体的安全策略，包括是否需要鉴权，需要的角色等：
 
 ```java
 package dev.local.gtm.api.config;
@@ -881,12 +881,12 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
 
     @Override
     public void configure(WebSecurity web) {
+        // 以下资源 Spring Security 会忽略，一般用于忽略静态资源
         web.ignoring()
                 .antMatchers(HttpMethod.OPTIONS, "/**")
                 .antMatchers("/app/**/*.{js,html}")
                 .antMatchers("/i18n/**")
                 .antMatchers("/content/**")
-                .antMatchers("/swagger-ui/index.html")
                 .antMatchers("/test/**");
     }
 
@@ -897,460 +897,552 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                 .authenticationEntryPoint(problemSupport)
                 .accessDeniedHandler(problemSupport)
                 .and()
-                .csrf()
-                .disable()
-                .headers()
-                .frameOptions()
-                .disable()
+                    .csrf()
+                    .disable()
+                    .headers()
+                    .frameOptions()
+                    .disable()
                 .and()
-                .sessionManagement()
-                .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                    .sessionManagement()
+                    .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 .and()
-                .authorizeRequests()
-                .antMatchers("/api/auth/**").permitAll()
-                .antMatchers("/api/**").authenticated()
-                .antMatchers("/websocket/tracker").hasAuthority(AuthoritiesConstants.ADMIN)
-                .antMatchers("/websocket/**").permitAll()
-                .antMatchers("/management/health").permitAll()
-                .antMatchers("/management/**").hasAuthority(AuthoritiesConstants.ADMIN)
-                .antMatchers("/v2/api-docs/**").permitAll()
-                .antMatchers("/swagger-resources/configuration/ui").permitAll()
-                .antMatchers("/swagger-ui/index.html").hasAuthority(AuthoritiesConstants.ADMIN)
+                    .authorizeRequests() // 限制 Request 需要认证，以下是不同路径需要的认证方式
+                        .antMatchers("/api/auth/**").permitAll() // 无需鉴权
+                        .antMatchers("/api/**").authenticated() // 其他路径均需认证
+                        .antMatchers("/websocket/tracker").hasAuthority(AuthoritiesConstants.ADMIN) // 不仅需要鉴权而且需要角色为 ADMIN
+                        .antMatchers("/management/health").permitAll() // 服务状态接口
+                        .antMatchers("/management/**").hasAuthority(AuthoritiesConstants.ADMIN) //服务管理接口
                 .and()
-                .apply(jwtConfigurer);
-
+                    .apply(jwtConfigurer);
     }
 }
 ```
 
-接下来我们要规定一下哪些资源需要什么样的角色可以访问了，在 `UserController` 加一个修饰符 `@PreAuthorize("hasRole('ADMIN')")` 表示这个资源只能被拥有 `ADMIN` 角色的用户访问。
+此时如果我们启动应用，访问 `http://localhost:8080/api/` ，可以看到如下输出，可见我们的安全配置是生效了。
+
+```json
+{
+    "type":"http://www.twigcodes.com/problem/problem-with-message",
+    "title":"Unauthorized",
+    "status":401,
+    "detail":"Full authentication is required to access this resource",
+    "path":"/api/",
+    "message":"error.http.401"
+}
+```
+
+在开始我们的实验前，需要先插入两个角色记录，这是验证鉴权接口的时候我们需要几个现成的角色。这个可以使用 MongoDB 的 shell 或者任一 MongoDB 的图形化管理工具，比如 `Studo 3T` <https://studio3t.com/> 。
+
+```js
+db.api_authority.insert({
+    "name": "ROLE_USER"
+});
+db.api_authority.insert({
+    "name": "ROLE_ADMIN"
+});
+```
+
+如果我们使用 Postman 做个实验的话，以 POST 方式访问 <http://localhost:8080/api/auth/register> 并在 `body` 中给出 `json` 的用户注册信息，如下图所示。
+
+![验证注册接口](/assets/2018-04-23-12-15-51.png)
+
+耶！我们成功的得到了 JWT token ，如果我们得到的 token 在 <https://jwt.io> 上进行一个验证的话，可以看到 token 的信息中包含了我们在 `TokenProvider` 中放进去的元素。但是请留意下方红色按钮，上面写着 `Invalid Signature` -- 非法签名。
+
+![在 jwt.io 上验证](/assets/2018-04-23-12-59-33.png)
+
+如果你还记得前面我们在 `AppProperties` 中定义的默认值，这个密钥的默认值是 `myDefaultSecret`
 
 ```java
+// 省略其他代码
+public class AppProperties {
+    // 省略其他代码
+    private final Security security = new Security();
+    // 省略其他代码
+    @Data
+    public static class Security {
+        private final Jwt jwt = new Jwt();
+        // 省略其他代码
+        @Data
+        public static class Jwt {
+            private String secret = "myDefaultSecret";
+            private long tokenValidityInSeconds = 7200;
+            private String tokenPrefix = "Bearer ";
+        }
+    }
+    // 省略其他代码
+}
+```
+
+所以我们把这个值粘贴到写着 `secret` 那个输入框，你就会发现红色的按钮变成蓝色，文字也变成了 `Signature Verified` -- 签名已验证。好的，这也验证了我们生成的 JWT token 是正确的。
+
+## 使用 JWT 进行 API 访问
+
+由于我们在 `SecurityConfig` 中的设置， `/api/auth` 路径下是不需要鉴权的，如果我们想验证一下鉴权访问的结果，需要新建一个 `TaskResource` ，其基础路径为 `/api/tasks` 。
+
+```java
+package dev.local.gtm.api.web.rest;
+
+import dev.local.gtm.api.domain.Task;
+import dev.local.gtm.api.repository.TaskRepo;
+import dev.local.gtm.api.repository.UserRepo;
+import dev.local.gtm.api.web.exception.ResourceNotFoundException;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.log4j.Log4j2;
+import lombok.val;
+import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@Log4j2
+@RestController
+@RequestMapping("/api")
+@RequiredArgsConstructor
+public class TaskResource {
+    private final TaskRepo taskRepo;
+    private final UserRepo userRepo;
+
+    @GetMapping("/tasks")
+    public List<Task> getAllTasks(Pageable pageable, @RequestParam(required = false) String desc) {
+        log.debug("REST 请求 -- 查询所有 Task");
+        return desc == null ?
+                taskRepo.findAll(pageable).getContent() :
+                taskRepo.findByDescLike(pageable, desc).getContent();
+    }
+
+    @GetMapping("/tasks/search/findByUserMobile")
+    public List<Task> findByUserMobile(Pageable pageable, @RequestParam String mobile) {
+        log.debug("REST 请求 -- 查询所有手机号为 {} Task", mobile);
+        return taskRepo.findByOwnerMobile(pageable, mobile).getContent();
+    }
+
+    @PostMapping("/tasks")
+    Task addTask(@RequestBody Task task) {
+        log.debug("REST 请求 -- 新增 Task {}", task);
+        return userRepo.findById(task.getOwner().getId())
+                .map(user -> {
+                    task.setOwner(user);
+                    return taskRepo.save(task);
+                })
+                .orElseThrow(() -> new ResourceNotFoundException("Task 中 id 为 " + task.getOwner().getId() + " 的 owner 不存在"));
+    }
+
+    @PutMapping("/tasks/{id}")
+    public Task updateTask(@PathVariable String id, @RequestBody Task toUpdate) {
+        log.debug("REST 请求 -- 更新 id: {} 的 Task {}", id, toUpdate);
+        val task = taskRepo.findById(id);
+        return task.map(res -> {
+            res.setDesc(toUpdate.getDesc());
+            res.setCompleted(toUpdate.isCompleted());
+            res.setOwner(toUpdate.getOwner());
+            return taskRepo.save(res);
+        }).orElseThrow(() -> new ResourceNotFoundException("id 为 "+ id + " 的 Task 没有找到"));
+    }
+
+    @GetMapping("/tasks/{id}")
+    public Task getTask(@PathVariable String id) {
+        log.debug("REST 请求 -- 取得 id: {} 的 Task", id);
+        val task = taskRepo.findById(id);
+        return task.orElseThrow(() -> new ResourceNotFoundException("id 为 "+ id + " 的 Task 没有找到"));
+    }
+
+    @DeleteMapping("/tasks/{id}")
+    @ResponseStatus(HttpStatus.OK)
+    public void deleteTask(@PathVariable String id) {
+        log.debug("REST 请求 -- 删除 id 为 {} 的Task", id);
+        val task = taskRepo.findById(id);
+        task.ifPresent(taskRepo::delete);
+    }
+}
+```
+
+这个 Controller 简单的实现了任务的增、删、改、查，为什么没有实现 Service 隔离，而是直接使用 Repository ？一般情况下如果只是简单增删改查操作，个人是不建议增加 Service 层的，单纯的为这种领域对象增加 Service 接口和实现，除了增加了代码的臃肿，没有什么其他好处。只有当业务逻辑复杂起来之后，我们才需要 Service 的封装。
+
+然后我们就可以在 Postman 中发一个 GET 请求访问 <http://localhost:8080/api/tasks>
+
+![直接访问 /api/tasks](/assets/2018-04-23-13-17-49.png)
+
+我们会得到一个 401 的未授权的返回结果，这验证了访问 API 需要鉴权
+
+```json
+{
+    "type": "http://www.twigcodes.com/problem/problem-with-message",
+    "title": "Unauthorized",
+    "status": 401,
+    "detail": "Full authentication is required to access this resource",
+    "path": "/api/tasks",
+    "message": "error.http.401"
+}
+```
+
+而我们如果把鉴权的 Header 在 Postman 中加进去的话，就可以正常得到返回结果了，注意我们得到是一个 200 响应码，和一个空数组，这很正常，因为我们并未添加新的 Task ，但这个 API 经过鉴权是可以访问的了。
+
+![添加授权头](/assets/2018-04-23-13-25-29.png)
+
+下面的问题就是如果同样是系统用户，但如何限制不同角色的用户可以访问不同的资源？
+
+## 使用角色
+
+接下来我们要规定一下哪些资源需要什么样的角色可以访问了，首先将 `TaskResource` 改造一下，我们给方法加上注解，现在只利用两个注解 `@PreAuthorize` 和 `@PostAuthorize` 。简单说一下下面代码的逻辑
+
+* `getAllTasks` -- 查询任务，默认情况下每个人只能得到自己的任务列表，而管理员可以得到所有的任务列表。这个权限是数据的查询方式不一样，虽然也可以使用注解，比如 `@PostFilter` ，但这种过滤是全部查出来之后过滤，浪费资源。我们这里采用的是根据角色给出不同的查询。
+* `findByUserMobile` -- 给管理员一个可以通过手机号过滤任务的方法
+* `addTask` -- 每个人创建任务的 owner 只能是自己（这个需求后面有变化，暂时这里先这么做），换句话就是自己建立的任务的所有者就是自己
+* `updateTask` -- 每个人只能更新自己的任务，当然管理员除外，管理员可以更新所有人的任务。
+* `getTask` -- 取得某一个任务，还是每个人只能取自己创建的任务，但管理员除外。
+* `deleteTask` -- 删除任务，这个我们先不加权限，后面再处理。
+
+```java
+public class TaskResource {
+    private final TaskRepo taskRepo;
+    private final UserRepo userRepo;
+
+    @GetMapping("/tasks")
+    public Page<Task> getAllTasks(Pageable pageable) {
+        log.debug("REST 请求 -- 查询所有 Task");
+        return SecurityUtils.isCurrentUserInRole(AuthoritiesConstants.ADMIN) ?
+                taskRepo.findAll(pageable) :
+                SecurityUtils.getCurrentUserLogin().map(login -> taskRepo.findByOwnerLogin(pageable, login))
+                        .orElseThrow(() -> new InternalServerErrorException("未找到当前登录用户的登录名"));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/tasks/search/findByUserMobile")
+    public List<Task> findByUserMobile(Pageable pageable, @RequestParam String mobile) {
+        log.debug("REST 请求 -- 查询所有手机号为 {} Task", mobile);
+        return taskRepo.findByOwnerMobile(pageable, mobile).getContent();
+    }
+
+    @PostMapping("/tasks")
+    Task addTask(@RequestBody Task task) {
+        log.debug("REST 请求 -- 新增 Task {}", task);
+        return SecurityUtils.getCurrentUserLogin()
+                .flatMap(userRepo::findOneByLogin)
+                .map(user -> {
+                    task.setOwner(user);
+                    return taskRepo.save(task);
+                })
+                .orElseThrow(() -> new ResourceNotFoundException("未找到用户鉴权信息"));
+    }
+
+    @PreAuthorize("#toUpdate.owner.login == principal.username or hasRole('ADMIN')")
+    @PutMapping("/tasks/{id}")
+    public Task updateTask(@PathVariable String id, @RequestBody Task toUpdate) {
+        log.debug("REST 请求 -- 更新 id: {} 的 Task {}", id, toUpdate);
+        val task = taskRepo.findById(id);
+        return task.map(res -> {
+            res.setDesc(toUpdate.getDesc());
+            res.setCompleted(toUpdate.isCompleted());
+            val user = userRepo.findById(toUpdate.getOwner().getId());
+            if (user.isPresent()) {
+                res.setOwner(user.get());
+            } else {
+                throw new ResourceNotFoundException("id 为 "+ id + " 的 User 没有找到");
+            }
+            return taskRepo.save(res);
+        }).orElseThrow(() -> new ResourceNotFoundException("id 为 "+ id + " 的 Task 没有找到"));
+    }
+
+    @PostAuthorize("returnObject.owner.login == principal.username or hasRole('ADMIN')")
+    @GetMapping("/tasks/{id}")
+    public Task getTask(@PathVariable String id) {
+        log.debug("REST 请求 -- 取得 id: {} 的 Task", id);
+        val task = taskRepo.findById(id);
+        return task.orElseThrow(() -> new ResourceNotFoundException("id 为 "+ id + " 的 Task 没有找到"));
+    }
+
+    @DeleteMapping("/tasks/{id}")
+    @ResponseStatus(HttpStatus.OK)
+    public void deleteTask(@PathVariable String id) {
+        log.debug("REST 请求 -- 删除 id 为 {} 的Task", id);
+        val task = taskRepo.findById(id);
+        task.ifPresent(taskRepo::delete);
+    }
+}
+```
+
+Spring Security 提供 4 个表达“之前”或“之后”意义的注解，这四个注解在我们的 `SecurityConfig` 中以 `@EnableGlobalMethodSecurity(prePostEnabled = true)` 这种形式启用，分别的用途是：
+
+* `@PreAuthorize` -- 在方法调用之前检验其表达式，以确定是否有权调用方法，这个注解也是四个中最常用的一个。
+* `@PostAuthorize` -- 在方法执行之后检验其表达式，以决定是否有权得到返回值。一般使用的场景是，在方法使用期无法得到某些数据，执行之后才可以，而权限表达式又需要这个值，此时就可以使用这个注解。但要注意一般如果方法是要改变某些数据的时候，要慎重使用这个注解，因为方法实际上已经执行，无论你有没有权限，限制的只是返回结果而已。通常会使用到内建的变量 `returnObject` -- 方法的返回值。
+* `@PreFilter` -- 在方法执行前对数据进行筛选，但使用的场景较少，一般是在得到数据之后进行筛选，而不是之前。
+* `@PostFilter` -- 在方法执行后对得到的数据进行筛选。需要注意这个筛选对于大数量级的数据来说是不适合的。
+
+所以 `@PreAuthorize("hasRole('ADMIN')")` 的意思就上班只能有 `ROLE_ADMIN` 角色的用户有权调用， 需注意的一点是 `hasRole` 表达式认为每个角色名字前都有一个前缀 `ROLE_`。所以这里的 `ADMIN` 其实在数据库中存储的是 `ROLE_ADMIN` 。 而 `hasRole` 就是一个内建表达式， Spring Security 提供的常用的内建表达式见下表：
+
+内建表达式 | 功能描述
+---|---
+`hasRole(role)` | 如果当前用户有该角色是返回 true ，否则 false 。角色名称默认是不加 `ROLE_` 前缀的。
+`hasAnyRole([role1,role2])` | 和上面的区别就是这个是只要有多个角色中的一个就返回 true
+`principal` | 当前用户的 `Principal` 对象，很多时候我们会在表达式中使用用户名信息 `principal.username` 或激活状态 `principal.enabled` 等
+`authentication` | Authentication 对象
+`permitAll` | 永远返回 `true`
+`denyAll` | 永远返回 `false`
+`isAnonymous()` | 如果是未鉴权用户就返回 `true`
+`isAuthenticated()` | 是否已鉴权
+`hasPermission(Object target, Object permission)` | 如果用户对目标对象有访问权限的话返回 `true`
+`hasPermission(Object targetId, String targetType, Object permission)` | 和上面类似，只不过多了一个参数 `id`
+
+这种表达式中如果想引用方法的参数，可以使用 `#` ，比如下面的表达式中的 `#toUpdate` 就是方法的参数 `@RequestBody Task toUpdate` 。
+
+```java
+@PreAuthorize("#toUpdate.owner.login == principal.username or hasRole('ADMIN')")
+    @PutMapping("/tasks/{id}")
+    public Task updateTask(@PathVariable String id, @RequestBody Task toUpdate) {
+        // 省略方法
+    }
+```
+
+前面的 `TaskResource` 的代码中，我们还使用了一个工具类 `SecurityUtils` ，这个工具类比较简单，就是进一步封装了 Spring Security 的一些方法，让我们使用起来更方便。
+
+```java
+package dev.local.gtm.api.security;
+
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+
+import java.util.Optional;
+
 /**
- * 在 @PreAuthorize 中我们可以利用内建的 SPEL 表达式：比如 'hasRole()' 来决定哪些用户有权访问。
- * 需注意的一点是 hasRole 表达式认为每个角色名字前都有一个前缀 'ROLE_'。所以这里的 'ADMIN' 其实在
- * 数据库中存储的是 'ROLE_ADMIN' 。这个 @PreAuthorize 可以修饰Controller也可修饰Controller中的方法。
- **/
-@RestController
-@RequestMapping("/users")
-@PreAuthorize("hasRole('ADMIN')")
-public class UserController {
-    @Autowired
-    private UserRepository repository;
+ * Spring Security 的工具类
+ */
+public final class SecurityUtils {
 
-    @RequestMapping(method = RequestMethod.GET)
-    public List<User> getUsers() {
-        return repository.findAll();
+    private SecurityUtils() {
     }
 
-    // 略去其它部分
+    /**
+     * 得到当前用户的登录名
+     *
+     * @return 返回当前用户的登录名
+     */
+    public static Optional<String> getCurrentUserLogin() {
+        SecurityContext securityContext = SecurityContextHolder.getContext();
+        return Optional.ofNullable(securityContext.getAuthentication())
+                .map(authentication -> {
+                    if (authentication.getPrincipal() instanceof UserDetails) {
+                        UserDetails springSecurityUser = (UserDetails) authentication.getPrincipal();
+                        return springSecurityUser.getUsername();
+                    } else if (authentication.getPrincipal() instanceof String) {
+                        return (String) authentication.getPrincipal();
+                    }
+                    return null;
+                });
+    }
+
+    /**
+     * 得到当前用户的 JWT token
+     *
+     * @return 返回当前用户的 JWT toekn
+     */
+    public static Optional<String> getCurrentUserJWT() {
+        SecurityContext securityContext = SecurityContextHolder.getContext();
+        return Optional.ofNullable(securityContext.getAuthentication())
+                .filter(authentication -> authentication.getCredentials() instanceof String)
+                .map(authentication -> (String) authentication.getCredentials());
+    }
+
+    /**
+     * 用户是否已鉴权
+     *
+     * @return 已鉴权返回 true 否则返回 false
+     */
+    public static boolean isAuthenticated() {
+        SecurityContext securityContext = SecurityContextHolder.getContext();
+        return Optional.ofNullable(securityContext.getAuthentication())
+                .map(authentication -> authentication.getAuthorities().stream()
+                        .noneMatch(grantedAuthority -> grantedAuthority.getAuthority().equals(AuthoritiesConstants.ANONYMOUS)))
+                .orElse(false);
+    }
+
+    /**
+     * 当前用户是否有指定角色
+     *
+     * @param authority 要检查的角色
+     * @return 如果有该角色返回 true 否则返回 false
+     */
+    public static boolean isCurrentUserInRole(String authority) {
+        SecurityContext securityContext = SecurityContextHolder.getContext();
+        return Optional.ofNullable(securityContext.getAuthentication())
+                .map(authentication -> authentication.getAuthorities().stream()
+                        .anyMatch(grantedAuthority -> grantedAuthority.getAuthority().equals(authority)))
+                .orElse(false);
+    }
 }
 ```
 
-类似的我们给 `TodoController` 加上  `@PreAuthorize("hasRole('USER')")` ，标明这个资源只能被拥有 `USER` 角色的用户访问：
+现在大家可以去试着通过 `/api/auth/register` 接口注册几个新用户，其中 `ADMIN` 角色的用户可以在 MongoDB 中手动修改一下，然后使用他们的 `token` 去创建各自的任务，体验一下角色的对于资源的限制。
 
-```java
-@RestController
-@RequestMapping("/todos")
-@PreAuthorize("hasRole('USER')")
-public class TodoController {
-    // 略去
-}
+下面我们来做一个验证，首先创建两个用户 `admin` （ `ROLE_ADMIN` 和 `ROLE_USER` 两个角色） 和 `user2` （ `ROLE_USER` 角色） 。
+
+```js
+db.api_users.insert({
+    "_id" : ObjectId("5add712330ccb9a9e7f95f7b"),
+    "login" : "admin",
+    "name" : "admin user",
+    "email" : "admin@local.dev",
+    "mobile" : "13012340001",
+    "activated" : true,
+    "authority_ids" : [
+        DBRef("api_authority", ObjectId("5add5d2c301b322e28e288f3")),
+        DBRef("api_authority", ObjectId("5add5d48301b322e28e288f4"))
+    ],
+    "password" : "$2a$10$.DN8bpMCQxkyvLjhfq5ht.6v8U6cICyW3aU57nizkBsuPHcYyF.4y",
+    "avatar" : "/img/avatar/2.jpg"
+});
+db.api_users.insert({
+    "_id" : ObjectId("5adda1eaf68cb3a9a905dc55"),
+    "login" : "user2",
+    "password" : "$2a$10$TiGrPs11iL3rqmVclg2mhOIiviXuB6NbkwFRXiCjc2gxaGJBpjuUe",
+    "mobile" : "13012340002",
+    "name" : "李四",
+    "email" : "lisi@local.dev",
+    "avatar" : "/img/avatar/3.jpg",
+    "activated" : true,
+    "authority_ids" : [
+        DBRef("api_authority", ObjectId("5add5d2c301b322e28e288f3"))
+    ],
+    "created_date" : ISODate("2018-04-23T09:05:46.922+0000"),
+    "last_modified_date" : ISODate("2018-04-23T09:05:46.922+0000"),
+    "_class" : "dev.local.gtm.api.domain.User"
+});
 ```
 
-现在应该 Spring Security 可以工作了，但为了可以更清晰的看到工作日志，我们希望配置一下，在和 `src` 同级建立一个 `config` 文件夹，在这个文件夹下面新建一个 `application.yml`。
+然后可以利用 `/api/login` 得到每个用户的 token 。分别使用几个用户的 token 创建任务，然后试一下各个接口的权限。
+
+TODO：需要再细化一下，这个地方最好有每种情况的截图和说明
+
+### 安全日志
+
+很多时候，如果 Spring Security 出现问题时，我们希望可以看到日志来帮助我们分析问题，日志怎么开启呢？只需要在 `application.yml` 中配置 `org.springframework.security: DEBUG` 即可。
 
 ```yml
-# Server configuration
-server:
-  port: 8090
-  contextPath:
-
-# Spring configuration
-spring:
-  jackson:
-    serialization:
-      INDENT_OUTPUT: true
-  data.mongodb:
-    host: localhost
-    port: 27017
-    database: springboot
-
-# Logging configuration
 logging:
   level:
+    org.apache.http: DEBUG
     org.springframework:
-      data: DEBUG
-      security: DEBUG
-
+          web:
+            client.RestTemplate: DEBUG
+          data: DEBUG
+          security: DEBUG
+    org.springframework.data.mongodb.core.MongoTemplate: DEBUG
+    dev.local.gtm.api: DEBUG
 ```
 
-我们除了配置了 logging 的一些东东外，也顺手设置了数据库和 http 服务的一些配置项，现在我们的服务器会在 8090 端口监听，而 spring data 和 security 的日志在 debug 模式下会输出到 console。
+其他日志也可以采用这种方式开启，比如上面我们设置了 `org.springframework.web.client.RestTemplate: DEBUG` ，这个是开启 RestTemplate 的请求日志，可以看到每个对外请求的细节信息。
 
-现在启动服务后，访问 `http://localhost:8090` 你可以看到根目录还是正常显示的
+而 `org.springframework.data.mongodb.core.MongoTemplate: DEBUG` 可以看到组装的 MongoDB 的查询语句。
 
-![根目录还是正常可以访问的][37]
+### 多环境的配置
 
-但我们试一下 `http://localhost:8090/users` ，观察一下console，我们会看到如下的输出，告诉由于用户未鉴权，我们访问被拒绝了。
+上面在做各种实验时，我不知道大家是否留意到了，我们操作的其实是真正的数据库，在平时做一些个人的探索项目时倒也无所谓。但如果在商业项目中，如果我们直接去访问生产库是绝对不允许的。当然除了数据库，比如有很多第三方 API ，或者其他的配置，在生产环境和开发环境中也是很不一样的。这就引出了一个现代开发中的重要概念 -- 多环境配置。
 
-```txt
-2017-03-10 15:51:53.351 DEBUG 57599 --- [nio-8090-exec-4] o.s.s.w.a.ExceptionTranslationFilter     : Access is denied (user is anonymous); redirecting to authentication entry point
+在 Spring Boot 中对于多环境配置有良好的支持，拿 `yml` 配置文件来说，我们有两种配置方式：
 
-org.springframework.security.access.AccessDeniedException: Access is denied
-    at org.springframework.security.access.vote.AffirmativeBased.decide(AffirmativeBased.java:84) ~[spring-securiåty-core-4.2.1.RELEASE.jar:4.2.1.RELEASE]
-```
-
-## 集成 JWT 和 Spring Securtiy
-
-到现在，我们还是让 JWT 和 Spring Security 各自为战，并没有集成起来。要想要 JWT 在 Spring 中工作，我们应该新建一个 `filter` ，并把它配置在 `WebSecurityConfig` 中。
-
-```java
-@Component
-public class JwtAuthenticationTokenFilter extends OncePerRequestFilter {
-
-    @Autowired
-    private UserDetailsService userDetailsService;
-
-    @Autowired
-    private JwtTokenUtil jwtTokenUtil;
-
-    @Value("${jwt.header}")
-    private String tokenHeader;
-
-    @Value("${jwt.tokenHead}")
-    private String tokenHead;
-
-    @Override
-    protected void doFilterInternal(
-            HttpServletRequest request,
-            HttpServletResponse response,
-            FilterChain chain) throws ServletException, IOException {
-        String authHeader = request.getHeader(this.tokenHeader);
-        if (authHeader != null && authHeader.startsWith(tokenHead)) {
-            final String authToken = authHeader.substring(tokenHead.length()); // The part after "Bearer "
-            String username = jwtTokenUtil.getUsernameFromToken(authToken);
-
-            logger.info("checking authentication " + username);
-
-            if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-
-                UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
-
-                if (jwtTokenUtil.validateToken(authToken, userDetails)) {
-                    UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                            userDetails, null, userDetails.getAuthorities());
-                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(
-                            request));
-                    logger.info("authenticated user " + username + ", setting security context");
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
-                }
-            }
-        }
-
-        chain.doFilter(request, response);
-    }
-}
-```
-
-事实上如果我们足够相信 `token` 中的数据，也就是我们足够相信签名 `token` 的 `secret` 的机制足够好，这种情况下，我们可以不用再查询数据库，而直接采用 `token` 中的数据。本例中，我们还是通过 Spring Security 的 `@UserDetailsService` 进行了数据查询，但简单验证的话，你可以采用直接验证 `token` 是否合法来避免昂贵的数据查询。
-
-接下来，我们会在 `WebSecurityConfig` 中注入这个 `filter` ，并且配置到 `HttpSecurity` 中：
-
-```java
-public class WebSecurityConfig extends WebSecurityConfigurerAdapter{
-
-    // 省略其它部分
-
-    @Bean
-    public JwtAuthenticationTokenFilter authenticationTokenFilterBean() throws Exception {
-        return new JwtAuthenticationTokenFilter();
-    }
-
-    @Override
-    protected void configure(HttpSecurity httpSecurity) throws Exception {
-        // 省略之前写的规则部分，具体看前面的代码
-
-        // 添加JWT filter
-        httpSecurity
-                .addFilterBefore(authenticationTokenFilterBean(), UsernamePasswordAuthenticationFilter.class);
-    }
-}
-```
-
-## 完成鉴权（登录）、注册和更新 token 的功能
-
-到现在，我们整个 API 其实已经在安全的保护下了，但我们遇到一个问题：所有的 API 都安全了，但我们还没有用户啊，所以所有 API 都没法访问。因此要提供一个注册、登录的 API ，这个 API 应该是可以匿名访问的。给它规划的路径呢，我们前面其实在 `WebSecurityConfig` 中已经给出了，就是 `/auth` 。
-
-首先需要一个 `AuthService` ，规定一下必选动作：
-
-```java
-public interface AuthService {
-    User register(User userToAdd);
-    String login(String username, String password);
-    String refresh(String oldToken);
-}
-```
-
-然后，实现这些必选动作，其实非常简单：
-
-1. 登录时要生成 `token` ，完成 Spring Security 认证，然后返回 `token` 给客户端
-2. 注册时将用户密码用 `BCrypt` 加密，写入用户角色，由于是开放注册，所以写入角色系统控制，将其写成 `ROLE_USER`
-3. 提供一个可以刷新 `token` 的接口 `refresh` 用于取得新的 `token`
-
-```java
-@Service
-public class AuthServiceImpl implements AuthService {
-
-    private AuthenticationManager authenticationManager;
-    private UserDetailsService userDetailsService;
-    private JwtTokenUtil jwtTokenUtil;
-    private UserRepository userRepository;
-
-    @Value("${jwt.tokenHead}")
-    private String tokenHead;
-
-    @Autowired
-    public AuthServiceImpl(
-            AuthenticationManager authenticationManager,
-            UserDetailsService userDetailsService,
-            JwtTokenUtil jwtTokenUtil,
-            UserRepository userRepository) {
-        this.authenticationManager = authenticationManager;
-        this.userDetailsService = userDetailsService;
-        this.jwtTokenUtil = jwtTokenUtil;
-        this.userRepository = userRepository;
-    }
-
-    @Override
-    public User register(User userToAdd) {
-        final String username = userToAdd.getUsername();
-        if(userRepository.findByUsername(username)!=null) {
-            return null;
-        }
-        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
-        final String rawPassword = userToAdd.getPassword();
-        userToAdd.setPassword(encoder.encode(rawPassword));
-        userToAdd.setLastPasswordResetDate(new Date());
-        userToAdd.setRoles(asList("ROLE_USER"));
-        return userRepository.insert(userToAdd);
-    }
-
-    @Override
-    public String login(String username, String password) {
-        UsernamePasswordAuthenticationToken upToken = new UsernamePasswordAuthenticationToken(username, password);
-        final Authentication authentication = authenticationManager.authenticate(upToken);
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-
-        final UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-        final String token = jwtTokenUtil.generateToken(userDetails);
-        return token;
-    }
-
-    @Override
-    public String refresh(String oldToken) {
-        final String token = oldToken.substring(tokenHead.length());
-        String username = jwtTokenUtil.getUsernameFromToken(token);
-        JwtUser user = (JwtUser) userDetailsService.loadUserByUsername(username);
-        if (jwtTokenUtil.canTokenBeRefreshed(token, user.getLastPasswordResetDate())){
-            return jwtTokenUtil.refreshToken(token);
-        }
-        return null;
-    }
-}
-```
-
-然后建立 `AuthController` 就好，这个 `AuthController` 中我们在其中使用了表达式绑定，比如 `@Value("${jwt.header}")`中的 `jwt.header`  其实是定义在 `applicaiton.yml` 中的
+* 单文件形式：在 `application.yml` 中以 `---` 区隔不同的环境配置。
+* 多文件形式：以 `applicaiton-环境配置名.yml` 形式提供多个文件。
 
 ```yml
-# JWT
-jwt:
-  header: Authorization
-  secret: mySecret
-  expiration: 604800
-  tokenHead: "Bearer "
-  route:
-    authentication:
-      path: auth
-      refresh: refresh
-      register: "auth/register"
+# 单文件形式
+spring:
+  application:
+    name: api-service
+  profiles:
+    active: dev
+  data:
+    mongodb:
+      database: gtm-api
+server:
+  port: 8080
+logging:
+  level:
+    org.apache.http: ERROR
+    org.springframework:
+      web: ERROR
+      data: ERROR
+      security: ERROR
+    org.springframework.data.mongodb.core.MongoTemplate: ERROR
+    dev.local.gtm.api: ERROR
+
+---
+
+spring:
+  profiles: dev
+  devtools:
+    remote:
+      secret: thisismysecret
+  data:
+    mongodb:
+      database: gtm-api-dev
+logging:
+  level:
+    org.apache.http: DEBUG
+    org.springframework:
+          web:
+            client.RestTemplate: DEBUG
+          data: DEBUG
+          security: DEBUG
+    org.springframework.data.mongodb.core.MongoTemplate: DEBUG
+    dev.local.gtm.api: DEBUG
+
+---
+
+spring:
+  profiles: test
+  data:
+    mongodb:
+      database: gtm-api-test
+logging:
+  level:
+    org.apache.http: DEBUG
+    org.springframework:
+          web:
+            client.RestTemplate: DEBUG
+          data: DEBUG
+          security: DEBUG
+    org.springframework.data.mongodb.core.MongoTemplate: DEBUG
+    dev.local.gtm.api: DEBUG
+
+---
+
+spring:
+  profiles: prod
+
 ```
 
-同样的 `@RequestMapping(value = "${jwt.route.authentication.path}", method = RequestMethod.POST)` 中的 `jwt.route.authentication.path` 也是定义在上面的
+如果配置项不是很多的时候，采用单文件的就可以了， `yml` 支持环境配置的“继承”，比如文件开始的那段就是公共配置，每个环境只需要改动在自己这里发生变化的即可，不写的自动使用公共配置。大家可以看到我们对于不同环境使用了不同的数据库和不同的日志。具体的环境配置名称使用类似 `profiles: test` 形式进行命名。
 
-```java
-@RestController
-public class AuthController {
-    @Value("${jwt.header}")
-    private String tokenHeader;
+#### 使用不同的环境
 
-    @Autowired
-    private AuthService authService;
+在 IDEA 中，我们可以在 `Run/Debug Configurations` 中设置 `Active Profiles`，比如填 `dev` 、 `test` 或 `prod` 等
 
-    @RequestMapping(value = "${jwt.route.authentication.path}", method = RequestMethod.POST)
-    public ResponseEntity<?> createAuthenticationToken(
-            @RequestBody JwtAuthenticationRequest authenticationRequest) throws AuthenticationException{
-        final String token = authService.login(authenticationRequest.getUsername(), authenticationRequest.getPassword());
+![IDEA 中设置 profile](/assets/2018-04-23-21-12-41.png)
 
-        // Return the token
-        return ResponseEntity.ok(new JwtAuthenticationResponse(token));
-    }
+如果使用 `gradle` 命令行的话，需要在 `api/build.gradle` 中增加 `bootRun` 区块
 
-    @RequestMapping(value = "${jwt.route.authentication.refresh}", method = RequestMethod.GET)
-    public ResponseEntity<?> refreshAndGetAuthenticationToken(
-            HttpServletRequest request) throws AuthenticationException{
-        String token = request.getHeader(tokenHeader);
-        String refreshedToken = authService.refresh(token);
-        if(refreshedToken == null) {
-            return ResponseEntity.badRequest().body(null);
-        } else {
-            return ResponseEntity.ok(new JwtAuthenticationResponse(refreshedToken));
-        }
-    }
-
-    @RequestMapping(value = "${jwt.route.authentication.register}", method = RequestMethod.POST)
-    public User register(@RequestBody User addedUser) throws AuthenticationException{
-        return authService.register(addedUser);
-    }
+```groovy
+apply plugin: 'org.springframework.boot'
+repositories {
+    maven { setUrl('http://oss.jfrog.org/artifactory/oss-snapshot-local/') }
+}
+configurations {
+    // 省略
+}
+bootRun {
+    systemProperties = System.properties as Map<String, ?>
+}
+test {
+    systemProperties['spring.profiles.active'] = 'test'
+}
+dependencies {
+// 省略
 }
 ```
 
-### 5.2.4 使用 SSL/TLS 认证机制
+然后就可以使用下面的命令运行 `prod` 环境，当然你可以试试其他的环境配置，并在不同环境配置下使用 API 创建任务或注册用户，可以看看 MongoDB 中是不是不同的配置下数据库是不一样的。
 
-### 5.2.5 基于密码和基于认证的鉴权问题
-
-### 5.2.6 测试验证 API
-
-接下来，我们就可以看看我们的成果了，首先注册一个用户 `peng2` ，很完美的注册成功了
-
-![注册用户][38]
-
-然后在 `/auth` 中取得 `token` ，也很成功
-
-![取得 token][39]
-
-不使用 `token` 时，访问 `/users` 的结果，不出意料的失败，提示未授权。
-
-![不使用 token 访问 users 列表][40]
-
-使用 `token` 时，访问 `/users` 的结果，虽然仍是失败，但这次提示访问被拒绝，意思就是虽然你已经得到了授权，但由于你的会员级别还只是普卡会员，所以你的请求被拒绝。
-
-![image_1bas22va52vk1rj445fhm87k72a.png-156.9kB][41]
-
-接下来我们访问 `/users/?username=peng2`，竟然可以访问啊
-
-![访问自己的信息是允许的][42]
-
-这是由于我们为这个方法定义的权限就是：拥有 ADMIN 角色或者是当前用户本身。Spring Security 真是很方便，很强大。
-
-```java
-@PostAuthorize("returnObject.username == principal.username or hasRole('ROLE_ADMIN')")
-    @RequestMapping(value = "/",method = RequestMethod.GET)
-    public User getUserByUsername(@RequestParam(value="username") String username) {
-        return repository.findByUsername(username);
-    }
+```bash
+./gradlew :api:bootRun -Dspring.profiles.active=prod
 ```
-
-## 跨域解决方案 -- CORS
-
-前面我们初步做出了一个可以实现受保护的 REST API ，但是我们没有涉及一个前端领域很重要的问题，那就是 **跨域请求**（ `cross-origin HTTP request` ）。先来回顾一些背景知识：
-
-### 什么是跨域？
-
-> 定义：当我们从本身站点请求不同域名或端口的服务所提供的资源时，就会发起跨域请求。
-
-例如最常见的我们很多的 `css` 样式文件是会链接到某个公共 CDN 服务器上，而不是在本身的服务器上，这其实就是典型的一个跨域请求。但浏览器由于安全原因限制了在脚本（ `script` ）中发起的跨域 HTTP 请求。也就是说 `XMLHttpRequest` 和 `Fetch` 等是遵循“同源规则”的，即只能访问自己服务器的指定端口的资源（同一服务器不同端口也会视为跨域）。但这种限制在今天，我们的应用需要访问多种外部 API 或资源的时候就不能满足开发者的需求了，因此就产生了若干对于跨域的解决方案， `JSONP` 是其中一种，但在今天来看主流的更彻底的解决方案是 `CORS`  -- `Cross-Origin Resource Sharing` 。
-
-### 跨域资源共享（ CORS ）
-
-这种机制将跨域的访问控制权交给服务器，这样可以保证安全的跨域数据传输。现代浏览器一般会将 CORS 的支持封装在 HTTP API 之中（ 比如 `XMLHttpRequest` 和 `Fetch` ），这样可以有效控制使用跨域请求的风险，因为你绕不过去，总得要使用 API 吧。
-
-概括来说，这个机制是增加一系列的 HTTP 头来让服务器可以描述哪些源是允许使用浏览器来访问资源的。而且对于简单的请求和复杂请求，处理机制是不一样的。
-
-简单请求仅允许三个 HTTP 方法：GET，POST 以及 HEAD ，另外只能支持若干 header 参数： `Accept` ， `Accept-Language` ， `Content-Language` ， `Content-Type` （值只能是 `application/x-www-form-urlencoded`、`multipart/form-data` 和 `text/plain`）， `DPR` ， `Downlink` ， `Save-Data` ， `Viewport-Width` 和  `Width` 。
-
-对于简单请求来说，比如下面这样一个简单的 GET 请求：从 `http://me.domain` 发起到 `http://another.domain/data/blablabla` 的资源请求
-
-```
-GET /data/blablabla/ HTTP/1.1
-// 请求的域名
-Host: another.domain
-...//省略其它部分，重点是下面这句，说明了发起请求者的来源
-Origin: http://me.domain
-```
-
-应用了 CORS 的对方服务器返回的响应应该像下面这个样子，当然这里 `Access-Control-Allow-Origin: *` 中的 `*` 表示任何网站都可以访问该资源，如果要限制只能从 `me.domain` 访问，那么需要改成  `Access-Control-Allow-Origin: http://me.domain`
-
-```txt
-HTTP/1.1 200 OK
-...//省略其它部分
-Access-Control-Allow-Origin: *
-...//省略其它部分
-Content-Type: application/json
-```
-
-那么对于复杂请求怎么办呢？这需要一次预检请求和一次实际的请求，也就是说需要两次和对方服务器的请求/响应。预检请求是以 OPTION 方法进行的，因为 OPTION 方法不会改变任何资源，所以这个预检请求是安全的，它的职责在于发送实际请求将会使用的 HTTP 方法以及将要发送的 HEADER 中将携带哪些内容，这样对方服务器可以根据预检请求的信息决定是否接受。
-
-```txt
-// 预检请求
-OPTIONS /resources/post/ HTTP/1.1
-Host: another.domain
-...// 省略其它部分
-Origin: http://me.domain
-Access-Control-Request-Method: POST
-Access-Control-Request-Headers: Content-Type
-```
-
-服务器对预检请求的响应如下：
-
-```txt
-HTTP/1.1 200 OK
-// 省略其它部分
-Access-Control-Allow-Origin: http://me.domain
-Access-Control-Allow-Methods: POST, GET, OPTIONS
-Access-Control-Allow-Headers: Content-Type
-Access-Control-Max-Age: 86400
-// 省略其它部分
-Content-Type: text/plain
-```
-
-接下来的正式请求就和上面的简单请求差不多了，就不赘述了。
-
-### Spring Boot 中如何启用 CORS
-
-啰嗦了这么多，终于进入正题，但我一直觉得不能光知其然而不知其所以然，所以各位就忍了吧。加入 CORS 的支持在 Spring Boot 中简单到不忍直视，添加一个配置类即可：
-
-```java
-import org.springframework.boot.web.servlet.FilterRegistrationBean;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-import org.springframework.web.filter.CorsFilter;
-
-@Configuration
-public class CorsConfig {
-    @Bean
-    public FilterRegistrationBean corsFilter() {
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        CorsConfiguration config = new CorsConfiguration();
-        config.setAllowCredentials(true);
-        // 设置你要允许的网站域名，如果全允许则设为 *
-        config.addAllowedOrigin("http://localhost:4200");
-        // 如果要限制 HEADER 或 METHOD 请自行更改
-        config.addAllowedHeader("*");
-        config.addAllowedMethod("*");
-        source.registerCorsConfiguration("/**", config);
-        FilterRegistrationBean bean = new FilterRegistrationBean(new CorsFilter(source));
-        // 这个顺序很重要哦，为避免麻烦请设置在最前
-        bean.setOrder(0);
-        return bean;
-    }
-}
-
-```
-
-如果我们使用 POSTMAN 访问一下 API，会发现得到一个 `Invalid CORS request` 的响应，因为我们的 API 只授权给了 `localhost:4200`
-
-![用 POSTMAN 无法得到请求结果][43]
-
-当然，如果我们使用 CURL 的话是可以访问的，这是因为 CURL 不是浏览器。
