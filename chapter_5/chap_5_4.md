@@ -1446,3 +1446,7 @@ dependencies {
 ```bash
 ./gradlew :api:bootRun -Dspring.profiles.active=prod
 ```
+
+#### 让容器支持多环境
+
+TODO：给出配置的方案
