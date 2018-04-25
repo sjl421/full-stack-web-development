@@ -26,7 +26,7 @@
   * [5.3 Controller 的构建](chapter_5/chap_5_3.md)
   * [5.4 Spring Security 和 JWT 保护 API](chapter_5/chap_5_4.md)
   * [5.5 跨域以及 API 文档](chapter_5/chap_5_5.md)
-* [第六章 前端和 API 配合](chapter_6/README.md)
+* [第六章 前端和 API 的配合](chapter_6/README.md)
   * [6.1 响应式的 Http API 处理](chapter_6/chap_6_1.md)
   * [6.2 高阶 rxjs 操作符](chapter_6/chap_6_2.md)
   * [6.3 安全守卫](chapter_6/chap_6_3.md)

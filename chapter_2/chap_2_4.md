@@ -87,8 +87,8 @@ WORKDIR /ng-app
 COPY . .
 
 ## 在生产模式下编译 Angular 应用
-ARG env=prod
-RUN npm run build -- --prod --environment $env
+ARG env=production
+RUN npm run build -- --prod --configuration $env
 
 ### 第二阶段：设置 Nginx 服务器 ###
 
@@ -215,11 +215,11 @@ Step 6/12 : ARG env=prod
  ---> Running in 0eb37fa6530c
 Removing intermediate container 0eb37fa6530c
  ---> 2234f5373e66
-Step 7/12 : RUN npm run build -- --prod --environment $env
+Step 7/12 : RUN npm run build -- --prod --configuration $env
  ---> Running in 3d26db2ca897
 
 > gtm@0.0.0 build /ng-app
-> ng build "--prod" "--environment" "dev"
+> ng build "--prod" "--configuration" "dev"
 
 Date: 2018-03-31T14:09:08.208Z
 Hash: 2e6fc11c769df2c5d8e8
