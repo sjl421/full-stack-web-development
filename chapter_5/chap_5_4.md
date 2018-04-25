@@ -931,6 +931,424 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
 }
 ```
 
+### 重构 AuthResource
+
+我们之前的 AuthResource 是直接使用 UserRepo 的，但是现在我们还需要使用 AuthorityRepo 和访问外部的 API （ LeanCloud 短信验证和 Captcha 验证），这就增加了业务的复杂度，我们应该把业务抽离出来，放在 Service 中。所以现在我们的 Controller 就变成了下面的样子：
+
+```java
+package dev.local.gtm.api.web.rest;
+
+// 省略导入
+
+/**
+ * 用户鉴权资源接口
+ *
+ * @author Peng Wang (wpcfan@gmail.com)
+ */
+@Log4j2
+@RestController
+@RequestMapping("/api")
+@RequiredArgsConstructor
+public class AuthResource {
+
+    private final AuthService authService;
+    private final AppProperties appProperties;
+
+    @PostMapping(value = "/auth/login")
+    public ResponseEntity<JWTToken> login(@RequestBody final Auth auth) {
+        log.debug("REST 请求 -- 将对用户: {} 执行登录鉴权", auth);
+        return generateJWTHeader(auth.getLogin(), auth.getPassword());
+    }
+
+    @PostMapping("/auth/register")
+    public ResponseEntity<JWTToken> register(@Valid @RequestBody UserVM userVM) {
+        log.debug("REST 请求 -- 注册用户: {} ", userVM);
+        if (!checkPasswordLength(userVM.getPassword())) {
+            throw new InvalidPasswordException();
+        }
+        authService.registerUser(userVM, userVM.getPassword());
+        return generateJWTHeader(userVM.getLogin(), userVM.getPassword());
+    }
+
+    @GetMapping(value = "/auth/mobile")
+    public void requestSmsCode(@RequestParam String mobile, @RequestParam String token) {
+        log.debug("REST 请求 -- 请求为手机号 {} 发送验证码，Captcha 验证 token 为 {} ", mobile, token);
+        authService.requestSmsCode(mobile, token);
+    }
+
+    @PostMapping(value = "/auth/mobile")
+    public ResetKey verifyMobile(@RequestBody MobileVerification verification) {
+        log.debug("REST 请求 -- 验证手机号 {} 和短信验证码 {}", verification.getMobile(), verification.getCode());
+        val key = authService.verifyMobile(verification.getMobile(), verification.getCode());
+        return new ResetKey(key);
+    }
+
+    @PostMapping(value = "/auth/reset")
+    public void resetPassword(@RequestBody KeyAndPasswordVM keyAndPasswordVM) {
+        log.debug("REST 请求 -- 重置密码 {}", keyAndPasswordVM);
+        authService.resetPassword(keyAndPasswordVM.getResetKey(), keyAndPasswordVM.getMobile(), keyAndPasswordVM.getPassword());
+    }
+
+    @GetMapping(value = "/auth/captcha")
+    public Captcha requestCaptcha() {
+        log.debug("REST 请求 -- 请求发送图形验证码 Captcha");
+        return authService.requestCaptcha();
+    }
+
+    @PostMapping("/auth/captcha")
+    public CaptchaResult verifyCaptcha(@RequestBody final CaptchaVerification verification) {
+        log.debug("REST 请求 -- 验证 Captcha {}", verification);
+        val result = authService.verifyCaptcha(verification.getCode(), verification.getToken());
+        log.debug("Captcha 验证返回结果 {}", verification);
+        return new CaptchaResult(result);
+    }
+
+    @GetMapping("/auth/search/username")
+    public ExistCheck usernameExisted(@RequestParam("username") String username) {
+        log.debug("REST 请求 -- 用户名是否存在 {}", username);
+        return new ExistCheck(authService.usernameExisted(username));
+    }
+
+    @GetMapping("/auth/search/email")
+    public ExistCheck emailExisted(@RequestParam("email") String email) {
+        log.debug("REST 请求 -- email 是否存在 {}", email);
+        return new ExistCheck(authService.emailExisted(email));
+    }
+
+    @GetMapping("/auth/search/mobile")
+    public ExistCheck mobileExisted(@RequestParam("mobile") String mobile) {
+        log.debug("REST 请求 -- email 是否存在 {}", mobile);
+        return new ExistCheck(authService.mobileExisted(mobile));
+    }
+
+    private static boolean checkPasswordLength(String password) {
+        return !StringUtils.isEmpty(password) &&
+                password.length() >= UserVM.PASSWORD_MIN_LENGTH &&
+                password.length() <= UserVM.PASSWORD_MAX_LENGTH;
+    }
+
+    private ResponseEntity<JWTToken> generateJWTHeader(String login, String password) {
+        val jwt = authService.login(login, password);
+        val headers = new HttpHeaders();
+        headers.add(
+                appProperties.getSecurity().getAuthorization().getHeader(),
+                appProperties.getSecurity().getJwt().getTokenPrefix() + jwt);
+        log.debug("JWT token {} 加入到 HTTP 头", jwt);
+        return new ResponseEntity<>(new JWTToken(jwt), headers, HttpStatus.OK);
+    }
+
+    /**
+     * 简单返回 JWT token
+     * 对于非常简单的需要封装成 JSON 的类，可以直接定义在 Controller 中
+     */
+    @Getter
+    @Setter
+    @AllArgsConstructor
+    private static class JWTToken {
+        @JsonProperty("id_token")
+        private String idToken;
+    }
+
+    @Getter
+    @Setter
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    private static class CaptchaVerification {
+        @JsonProperty("captcha_token")
+        private String token;
+        @JsonProperty("captcha_code")
+        private String code;
+    }
+
+    @Getter
+    @Setter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class MobileVerification {
+        private String mobile;
+        private String code;
+    }
+
+    @Getter
+    @Setter
+    @AllArgsConstructor
+    private static class ResetKey {
+        @JsonProperty("reset_key")
+        private String resetKey;
+    }
+
+    @Getter
+    @Setter
+    @AllArgsConstructor
+    private static class CaptchaResult {
+        @JsonProperty("validate_token")
+        private String validatedToken;
+    }
+
+    @Getter
+    @Setter
+    @AllArgsConstructor
+    private static class ExistCheck {
+        private boolean existed;
+    }
+}
+```
+
+我们增加了几个接口包括“请求图形验证码”、“验证图形验证码”、“验证用户名是否存在”、“验证电子邮件是否存在”和“验证手机号是否存在”等。
+
+由于使用的临时对象比较多，包括接受的参数以及返回的对象，都需要封装成对象以便做 JSON 的序列化和反序列化，所以我们建立了很多私有的类。在 Lombok 的帮助下这些类也不是很复杂。
+
+### 鉴权的服务层
+
+在我们将业务逻辑剥离到 Service 中的时候，需要注意对于第三方 API 的调用，虽然我们还是使用了前面提到的 RestTemplate，但在这里我们做了一些改动。
+
+```java
+package dev.local.gtm.api.service.impl;
+
+// 省略包的导入信息
+
+@Log4j2
+@RequiredArgsConstructor
+@Service
+public class AuthServiceImpl implements AuthService {
+
+    private final UserRepo userRepo;
+    private final AuthorityRepo authorityRepo;
+    private final PasswordEncoder passwordEncoder;
+    private final TokenProvider tokenProvider;
+    private final AuthenticationManager authenticationManager;
+    @Qualifier("leanCloudTemplate")
+    private final RestTemplate leanCloudTemplate;
+    private final AppProperties appProperties;
+
+    @Override
+    public void registerUser(UserDTO userDTO, String password) {
+        if (userRepo.findOneByLogin(userDTO.getLogin()).isPresent()) {
+            throw new LoginExistedException();
+        }
+        if (userRepo.findOneByMobile(userDTO.getMobile()).isPresent()) {
+            throw new MobileExistedException();
+        }
+        if (userRepo.findOneByEmailIgnoreCase(userDTO.getEmail()).isPresent()) {
+            throw new EmailExistedException();
+        }
+        val newUser = User.builder()
+                .password(passwordEncoder.encode(password))
+                .login(userDTO.getLogin())
+                .mobile(userDTO.getMobile())
+                .email(userDTO.getEmail())
+                .name(userDTO.getName())
+                .avatar(userDTO.getAvatar())
+                .activated(true)
+                .authority(authorityRepo.findOneByName(AuthoritiesConstants.USER).orElseThrow(AuthorityNotFoundException::new))
+                .build();
+        log.debug("user to be saved {} ", newUser);
+        userRepo.save(newUser);
+        log.debug("用户 {} 创建成功", newUser);
+    }
+
+    @Override
+    public String login(String login, String password) {
+        val authenticationToken = new UsernamePasswordAuthenticationToken(login, password);
+        val authentication = this.authenticationManager.authenticate(authenticationToken);
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        return tokenProvider.createToken(authentication);
+    }
+
+    @Override
+    public void requestSmsCode(String mobile, String validateToken) {
+        sendSmsCode(mobile, validateToken);
+    }
+
+    @Override
+    public String verifyMobile(String mobile, String code) {
+        return userRepo.findOneByMobile(mobile)
+                .map(user -> {
+                    verifySmsCode(mobile, code);
+                    user.setResetKey(CredentialUtil.generateResetKey());
+                    userRepo.save(user);
+                    return user.getResetKey();
+                })
+                .orElseThrow(MobileNotFoundException::new);
+    }
+
+    @Override
+    public Captcha requestCaptcha() {
+        val captcha = leanCloudTemplate.getForObject(appProperties.getCaptcha().getRequestUrl(), Captcha.class);
+        if (captcha == null) {
+            log.debug("由于某种原因，远程返回的是 200，但得到的对象为空");
+            throw new InternalServerErrorException("请求 Captcha 返回对象为空");
+        }
+        return captcha;
+    }
+
+    @Override
+    public String verifyCaptcha(String code, String token) {
+        val body = new HashMap<String, String>();
+        body.put("captcha_code", code);
+        body.put("captcha_token", token);
+        val entity = new HttpEntity<>(body);
+        val validateToken = leanCloudTemplate.postForObject(appProperties.getCaptcha().getVerificationUrl(), entity, ValidateToken.class);
+        if (validateToken == null) {
+            log.debug("由于某种原因，远程返回的是 200，但得到的对象为空");
+            throw new InternalServerErrorException("验证 Captcha 返回对象为空，无法进行验证");
+        }
+        return validateToken.getValidatedToken();
+    }
+
+    @Override
+    public void resetPassword(String key, String mobile, String password) {
+        userRepo.findOneByMobile(mobile)
+                .map(user -> {
+                    if (!user.getResetKey().equals(key)) {
+                        log.debug("ResetKey 不匹配，客户端传递的 key 为：{}，期待值为 {} ", key, user.getResetKey());
+                        throw new ResetKeyNotMatchException();
+                    }
+                    user.setPassword(passwordEncoder.encode(password));
+                    user.setResetKey(null);
+                    user.setResetDate(Instant.now());
+                    return userRepo.save(user);
+                })
+                .orElseThrow(LoginNotFoundException::new);
+    }
+
+    @Override
+    public boolean usernameExisted(String username) {
+        return userRepo.findOneByLogin(username).isPresent();
+    }
+
+    @Override
+    public boolean emailExisted(String email) {
+        return userRepo.findOneByEmailIgnoreCase(email).isPresent();
+    }
+
+    @Override
+    public boolean mobileExisted(String mobile) {
+        return userRepo.findOneByMobile(mobile).isPresent();
+    }
+
+    private void verifySmsCode(final String mobile, final  String code) {
+        val body = new HashMap<String, String>();
+        body.put("mobilePhoneNumber", mobile);
+        val entity = new HttpEntity<>(body);
+        leanCloudTemplate.postForEntity(
+                appProperties.getSmsCode().getVerificationUrl() + "/" + code,
+                entity, Void.class);
+    }
+
+    private void sendSmsCode(String mobile, String validateToken) {
+        val body = new HashMap<String, String>();
+        body.put("mobilePhoneNumber", mobile);
+        body.put("validate_token", validateToken);
+        val entity = new HttpEntity<>(body);
+        leanCloudTemplate.postForEntity(appProperties.getSmsCode().getRequestUrl(), entity, Void.class);
+    }
+
+    @Getter
+    @Setter
+    private static class ValidateToken {
+        @JsonProperty("validate_token")
+        private String validatedToken;
+    }
+}
+```
+
+你可能注意到了 `@Qualifier("leanCloudTemplate")` ，为什么要加这个 `@Qualifier` 呢？因为随着业务的拓展，我们感觉到似乎不只会单单使用 LeanCloud 一个第三方服务，但我们目前的 RestTemplate 似乎是为了 LeanCloud 打造的（比如，我们的认证头截断器就是专门处理 LeanCloud 认证的），这不太好，所以我们需要有所区分。
+
+因此在 `OutgoingRestTemplateConfig` 中我们也标识了 `@Bean("leanCloudTemplate")` ，这样我们以后可以为每个第三方服务提供一个专门 的 Bean，用于注入适合该服务的 RestTemplate 。比如在 `getLeanCloudRestTemplate` 中，我们除了原来的认证头截断器 `LeanCloudAuthHeaderInterceptor` 之外，还为它定制了专门的错误处理器 `LeanCloudRequestErrorHandler` 。
+
+之所以要有这个错误处理器，是由于我们访问第三方服务时，如果出现错误，对方服务器会返回错误信息。而我们如果不处理的话，在我们自己的客户端调用的时候统一都是 500 内部服务器错误，这显然是不对的。我们需要将对方的出错信息根据不同情况转换成自己的错误信息，而这个就是 `LeanCloudRequestErrorHandler` 的作用。
+
+除了这些之外，我们还可以指定不同的 Http 类库，现在我们使用的是 JDK 内建的 Http 类库，但如果你想使用 Apache 的 HttpComponent 的话，就可以使用 `new RestTemplateBuilder().requestFactory(new HttpComponentsAsyncClientHttpRequestFactory())` 去设置，当然别忘了在 `build.gradle` 中添加依赖。
+
+```java
+package dev.local.gtm.api.config;
+
+// 省略包导入部分
+@Log4j2
+@RequiredArgsConstructor
+@Configuration
+public class OutgoingRestTemplateConfig {
+
+    private static final int TIMEOUT = 10000;
+    private final AppProperties appProperties;
+
+    @Bean("leanCloudTemplate")
+    public RestTemplate getLeanCloudRestTemplate() {
+        return new RestTemplateBuilder()
+                .setConnectTimeout(TIMEOUT)
+                .setReadTimeout(TIMEOUT)
+                .errorHandler(new LeanCloudRequestErrorHandler())
+//                .requestFactory(new HttpComponentsAsyncClientHttpRequestFactory()) // Use Apache HttpComponent
+                .interceptors(new LeanCloudAuthHeaderInterceptor(appProperties))
+                .build();
+    }
+
+    public class LeanCloudRequestErrorHandler implements ResponseErrorHandler {
+
+        @Override
+        public boolean hasError(ClientHttpResponse response) throws IOException {
+            return response.getStatusCode() != HttpStatus.OK;
+        }
+
+        @Override
+        public void handleError(ClientHttpResponse response) throws IOException {
+            if (response.getStatusCode() == HttpStatus.FORBIDDEN) {
+                throw new OutgoingBadRequestException("403 Forbidden");
+            }
+            val err = extractErrorFromResponse(response);
+            if (err == null) {
+                throw new InternalServerErrorException("从 Response 中提取 json 返回 null");
+            }
+            throw new OutgoingBadRequestException(err.getError());
+        }
+
+        private LeanCloudError extractErrorFromResponse(ClientHttpResponse response) throws IOException {
+            String json = readResponseJson(response);
+            try {
+                ObjectMapper mapper = new ObjectMapper(new JsonFactory());
+                JsonNode jsonNode = mapper.readValue(json, JsonNode.class);
+                Integer code = jsonNode.has("code") ? jsonNode.get("code").intValue() : null;
+                String err = jsonNode.has("error") ? jsonNode.get("error").asText() : null;
+
+                val error = new LeanCloudError(code, err);
+                log.debug("LeanCloud error: ");
+                log.debug("   CODE        : " + error.getCode());
+                log.debug("   ERROR       : " + error.getError());
+                return error;
+            } catch (JsonParseException e) {
+                return null;
+            }
+        }
+
+        private String readResponseJson(ClientHttpResponse response) throws IOException {
+            val json = readFully(response.getBody());
+            log.debug("LeanCloud 返回的错误: " + json);
+            return json;
+        }
+
+        private String readFully(InputStream in) throws IOException {
+            val reader = new BufferedReader(new InputStreamReader(in));
+            val sb = new StringBuilder();
+            while (reader.ready()) {
+                sb.append(reader.readLine());
+            }
+            return sb.toString();
+        }
+    }
+
+    @Data
+    @AllArgsConstructor
+    private class LeanCloudError {
+        private Integer code;
+        private String error;
+    }
+}
+```
+
+### 验证 JWT token
+
 在开始我们的实验前，需要先插入两个角色记录，这是验证鉴权接口的时候我们需要几个现成的角色。这个可以使用 MongoDB 的 shell 或者任一 MongoDB 的图形化管理工具，比如 `Studo 3T` <https://studio3t.com/> 。
 
 ```js
