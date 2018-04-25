@@ -93,6 +93,9 @@ public class CorsConfig {
         val config = appProperties.getCors();
         if (config.getAllowedOrigins() != null && !config.getAllowedOrigins().isEmpty()) {
             log.debug("注册 CORS 过滤器");
+            config.addAllowedOrigin("*");
+            config.addAllowedMethod("*");
+            config.addAllowedHeader("*");
             source.registerCorsConfiguration("/api/**", config);
             source.registerCorsConfiguration("/management/**", config);
             source.registerCorsConfiguration("/v2/api-docs", config);
