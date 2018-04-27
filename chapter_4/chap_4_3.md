@@ -320,9 +320,9 @@ export class RegisterValidator {
       if (!val) {
         return of(null);
       }
-      return service.checkUniqueUsername(val).pipe(
+      return service.usernameExisted(val).pipe(
         map(res => {
-          return res ? { usernameNotUnique: true } : null;
+          return res.existed ? { usernameNotUnique: true } : null;
         })
       );
     };
@@ -333,9 +333,9 @@ export class RegisterValidator {
       if (!val) {
         return of(null);
       }
-      return service.checkUniqueEmail(val).pipe(
+      return service.emailExisted(val).pipe(
         map(res => {
-          return res ? { emailNotUnique: true } : null;
+          return res.existed ? { emailNotUnique: true } : null;
         })
       );
     };
@@ -346,9 +346,9 @@ export class RegisterValidator {
       if (!val) {
         return of(null);
       }
-      return service.checkUniqueMobile(val).pipe(
+      return service.mobileExisted(val).pipe(
         map(res => {
-          return res ? { mobileNotUnique: true } : null;
+          return res.existed ? { mobileNotUnique: true } : null;
         })
       );
     };

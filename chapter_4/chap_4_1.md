@@ -11,7 +11,7 @@ export interface User {
   // 唯一标识
   id: string;
   // 用户名
-  username: string;
+  login: string;
   // 姓名
   name: string;
   // 密码
@@ -271,7 +271,7 @@ export class QuoteComponent {
   <mat-card-content>
     <form [formGroup]="form" (ngSubmit)="submit(form, $event)">
       <mat-form-field class="full-width">
-        <input matInput placeholder="您的用户名" formControlName="username">
+        <input matInput placeholder="您的用户名" formControlName="login">
         <mat-error> {{ usernameErrors }} </mat-error>
       </mat-form-field>
       <mat-form-field class="full-width">
@@ -685,7 +685,7 @@ export class RegisterFormComponent implements OnInit {
       .map(i => `${this.avatarName}:svg-${i}`)
       .reduce((r: string[], x: string) => [...r, x], []);
     this.form = this.fb.group({
-      username: [
+      login: [
         '',
         [
           Validators.required,

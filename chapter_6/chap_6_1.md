@@ -4,7 +4,7 @@
 
 ## Angular 中的 HTTP 服务
 
-要使用 Angular 中的 Http 服务，一般有两个选择，如果在 Angular 4.x 时可以使用传统的位于 `@angular/http` 中的 `HttpModule` 。但在 Angular 4.3 之后，官方推荐使用位于 `@angular/common/http` 中的 `HttpClientModule` 。我们这里采用的就是 `HttpClientModule` ，注意我们之所以把这个 Module 放在 `CoreModule` 中导入，是因为 `HttpClient` 是以依赖形式 `Provide` 出来的，我们在同一个应用没有必要初始化多个 `HttpClient` 。
+要使用 Angular 中的 Http 服务，一般有两个选择，如果在 Angular 4.x 时可以使用传统的位于 `@angular/http` 中的 `HttpModule` 。但在 Angular 4.3 之后，官方增加了位于 `@angular/common/http` 中的 `HttpClientModule` ，并且推荐使用 `HttpClient` 。我们这里采用的就是 `HttpClientModule` ，注意我们之所以把这个 Module 放在 `CoreModule` 中导入，是因为 `HttpClient` 是以依赖形式 `Provide` 出来的，我们在同一个应用没有必要初始化多个 `HttpClient` 。
 
 ```ts
 // 省略其他导入
@@ -152,7 +152,7 @@ export class CoreModule {
 
 ### 让容器支持环境配置
 
-其实在第二章，我们给出前端的容器镜像文件时已经支持了环境配置，我们在 `RUN npm run build -- --prod --configuration $env` 中已经指定了环境配置。
+其实在第二章，我们给出前端的容器镜像文件时已经支持了环境配置，我们在 `RUN npm run build --prod --configuration $env` 中已经指定了环境配置。
 
 ```Dockerfile
 ### STAGE 1: Build ###
@@ -169,7 +169,7 @@ RUN npm run build --prod --configuration $env
 ## 省略其他部分
 ```
 
-我们在 Dockerfile 中定义了一个参数 `env` ，而这个配置名称可以通过参数形式传入 Docker 制作过程，再回顾我们的 `docker-compose.yml` ，我们在构建镜像时使用 `args` 传入了 `env`
+我们在 `Dockerfile` 中定义了一个参数 `env` ，而这个配置名称可以通过参数形式传入 Docker 制作过程，再回顾我们的 `docker-compose.yml` ，我们在构建镜像时使用 `args` 传入了 `env`
 
 ```yml
 version: '3'
@@ -326,7 +326,7 @@ export class AuthService {
 }
 ```
 
-HttpClient 都支持那些操作，有哪些方法？最好的办法是看看它的类定义，下面的代码列出了它主要方法。可以看到对于常见的 Rest API 操作来说， `delete` 、 `get` 方法是没有 body 参数的，而 `patch` 、 `put` 、 `post` 是有的，这个 `body` 就是 Http Request Body ，对于 `get` 和 `delete` 操作，都不会携带诸如 `json` 、 `xml` 等对象，而是直接在 `URL` 上体现参数。
+`HttpClient` 都支持那些操作，有哪些方法？最好的办法是看看它的类定义，下面的代码列出了它主要方法。可以看到对于常见的 Rest API 操作来说， `delete` 、 `get` 方法是没有 body 参数的，而 `patch` 、 `put` 、 `post` 是有的，这个 `body` 就是 Http Request Body ，对于 `get` 和 `delete` 操作，都不会携带诸如 `json` 、 `xml` 等对象，而是直接在 `URL` 上体现参数。
 
 ```ts
 class HttpClient {
@@ -361,3 +361,27 @@ class HttpClient {
 }
 ```
 
+## 更改注册表单控件
+
+我们在之前的表单提交函数中直接把 `form.value` 传到了父组件。这个有点问题，因为这个组件中的 `passwords` 是一个 `FormGroup` ，里面包含 `password` 和 `repeat` 。所以这个结构如果传到后端会出错的，因为后端认为没有 `password` ，我们来改造 `submit` 函数，构造 `user` 。
+
+```ts
+// 省略导入
+export class RegisterFormComponent implements OnInit {
+  // 省略
+  submit({ valid, value }: FormGroup, ev: Event) {
+    if (!valid) {
+      return;
+    }
+    const user: User = {
+      login: value.login,
+      password: value.passwords.password,
+      email: value.email,
+      name: value.name,
+      mobile: value.mobile,
+      avatar: value.avatar
+    };
+    this.submitEvent.emit(user);
+  }
+}
+```
