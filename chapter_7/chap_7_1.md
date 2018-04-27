@@ -185,4 +185,47 @@ public String findFile(String id, boolean includeArchived)
 
 当然这个 `key` 可以使用 SpEL 表达式，比如 `key="T(someparam).hash(#someparam)` 等，也可以指定自定义 `key` 生成器，比如 `@Cacheable(cacheNames="files", keyGenerator="customKeyGenerator")` ，这可以通过实现 `org.springframework.cache.interceptor.KeyGenerator` 接口来自定义。
 
+## 测试缓存是否生效
 
+如果我们在 API 文档界面 <http://localhost:8080/swagger-ui/index.html> 对 `/api/auth/search/username` 进行测试的话，我们可以观察 `Console` 里面的日志
+
+![利用 API 文档界面进行测试](/assets/2018-04-27-19-32-26.png)
+
+在 Spring Boot 启动的日志中可以看到类似下面这种日志，这是 Cache 配置成功的标志，系统 Cache 框架将我们注解标记的方法缓存起来了。
+
+```log
+  : Adding cacheable method 'findOneByEmailIgnoreCase' with attribute: [Builder[public abstract j
+ava.util.Optional dev.local.gtm.api.repository.UserRepo.findOneByEmailIgnoreCase(java.lang.String)] caches=[usersByEmail] | key='' | keyGenerator='' | cacheManager='' | cacheResolver='' | condition='' | unless='' | sync='false']
+2018-04-27 19:50:20.207 DEBUG 10821 --- [           main] o.s.c.a.AnnotationCacheOperationSource
+  : Adding cacheable method 'emailExisted' with attribute: [Builder[public dev.local.gtm.api.web.
+rest.AuthResource$ExistCheck dev.local.gtm.api.web.rest.AuthResource.emailExisted(java.lang.String)] caches=[usersByEmail] | key='' | keyGenerator='' | cacheManager='' | cacheResolver='' | condition='' | unless='' | sync='false']
+```
+
+我们可以观察到日志中，有 `AuthServiceImpl.usernameExisted()` 方法进入的条目，也有 `MongoTemplate` 进行数据库查询的条目，这证明第一次进行查询的时候，没有进行缓存，这是正常情况。
+
+```log
+2018-04-27 19:29:41.981 DEBUG 9561 --- [ XNIO-2 task-19] d.l.gtm.api.aop.logging.LoggingAspect : Enter: dev.local.gtm.api.web.rest.AuthResource.usernameExisted() with argument[s] = [test123]
+2018-04-27 19:29:41.981 DEBUG 9561 --- [ XNIO-2 task-19] dev.local.gtm.api.web.rest.AuthResource : REST 请求 -- 用户名是否存在 test123
+2018-04-27 19:29:41.982 DEBUG 9561 --- [ XNIO-2 task-19] d.l.gtm.api.aop.logging.LoggingAspect : Enter: dev.local.gtm.api.service.impl.AuthServiceImpl.usernameExisted() with argument[s] = [test123]
+2018-04-27 19:29:41.988 DEBUG 9561 --- [ XNIO-2 task-19] o.s.d.m.r.query.MongoQueryCreator : Created query Query: { "login" : "test123" }, Fields: { }, Sort: { }
+2018-04-27 19:29:41.990 DEBUG 9561 --- [ XNIO-2 task-19] o.s.data.mongodb.core.MongoTemplate : find using query: { "login" : "test123" } fields: Document{{}} for class: class dev.local.gtm.api.domain.User in collection: api_users
+2018-04-27 19:29:41.996 DEBUG 9561 --- [ XNIO-2 task-19] d.l.gtm.api.aop.logging.LoggingAspect : Exit: dev.local.gtm.api.service.impl.AuthServiceImpl.usernameExisted() with result = false
+2018-04-27 19:29:41.997 DEBUG 9561 --- [ XNIO-2 task-19] d.l.gtm.api.aop.logging.LoggingAspect : Exit: dev.local.gtm.api.web.rest.AuthResource.usernameExisted() with result = dev.local.gtm.api.web.rest.AuthResource$ExistCheck@32ef7921
+2018-04-27 19:29:41.999 DEBUG 9561 --- [ XNIO-2 task-19] o.s.s.w.header.writers.HstsHeaderWriter : Not injecting HSTS header since it did not match the requestMatcher org.springframework.security.web.header.writers.HstsHeaderWriter$SecureRequestMatcher@e228328
+2018-04-27 19:29:42.002 DEBUG 9561 --- [ XNIO-2 task-19] o.s.s.w.a.ExceptionTranslationFilter : Chain processed normally
+2018-04-27 19:29:42.002 DEBUG 9561 --- [ XNIO-2 task-19] s.s.w.c.SecurityContextPersistenceFilter : SecurityContextHolder now cleared, as request processing completed
+```
+
+接下来，我们再次执行同样的请求，还是观察日志输出，这一次我们找不到任何 MongoDB 查询的日志，
+
+```log
+2018-04-27 19:42:22.733 DEBUG 9561 --- [ XNIO-2 task-20] d.l.gtm.api.aop.logging.LoggingAspect : Enter: dev.local.gtm.api.web.rest.AuthResource.usernameExisted() with argument[s] = [test123]
+2018-04-27 19:42:22.733 DEBUG 9561 --- [ XNIO-2 task-20] dev.local.gtm.api.web.rest.AuthResource : REST 请求 -- 用户名是否存在 test123
+2018-04-27 19:42:22.733 DEBUG 9561 --- [ XNIO-2 task-20] d.l.gtm.api.aop.logging.LoggingAspect : Enter: dev.local.gtm.api.service.impl.AuthServiceImpl.usernameExisted() with argument[s] = [test123]
+2018-04-27 19:42:22.758 DEBUG 9561 --- [ XNIO-2 task-20] d.l.gtm.api.aop.logging.LoggingAspect
+ : Exit: dev.local.gtm.api.service.impl.AuthServiceImpl.usernameExisted() with result = false
+2018-04-27 19:42:22.758 DEBUG 9561 --- [ XNIO-2 task-20] d.l.gtm.api.aop.logging.LoggingAspect : Exit: dev.local.gtm.api.web.rest.AuthResource.usernameExisted() with result = dev.local.gtm.api.web.rest.AuthResource$ExistCheck@53c05c2
+2018-04-27 19:42:22.766 DEBUG 9561 --- [ XNIO-2 task-20] o.s.s.w.header.writers.HstsHeaderWriter : Not injecting HSTS header since it did not match the requestMatcher org.springframework.security.web.header.writers.HstsHeaderWriter$SecureRequestMatcher@e228328
+2018-04-27 19:42:22.773 DEBUG 9561 --- [ XNIO-2 task-20] o.s.s.w.a.ExceptionTranslationFilter : Chain processed normally
+2018-04-27 19:42:22.773 DEBUG 9561 --- [ XNIO-2 task-20] s.s.w.c.SecurityContextPersistenceFilter : SecurityContextHolder now cleared, as request processing completed
+```
