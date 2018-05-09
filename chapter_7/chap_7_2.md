@@ -95,7 +95,7 @@ dependencies {
 }
 ```
 
-使用 Redis 作为缓存框架更是简单得不能再简单，只需要在 `application.yml` 中设置 `spring.cache.type` 为 `redis`
+使用 Redis 作为缓存框架更是简单得不能再简单，只需要在 `application.yml` 中设置 `spring.cache.type` 为 `redis` ，随后就可以在 `spring.redis.host` 中配置主机名或 IP 地址，用 `spring.redis.port` 配置端口。在下面的配置中，我们为开发环境 ( `dev` ) 配置了 `localhost` ，而为生产环境配置了 `redis` 作为主机名，我们在生产环境中会使用容器，你还记得我们在 `docler-compose.yml` 中是怎么样配置的吧，我们的 `api-service` 连接了两个容器，一个是 `mongo` ，另一个就是 `redis` 。
 
 ```yml
 spring:
@@ -172,3 +172,80 @@ spring:
   profiles: prod
 
 ```
+
+现在如果我们启动 MongoDB 和 Redis
+
+```bash
+docker-compose up -d redis mongo
+```
+
+然后在启动自己的应用，你就可以看到我们的缓存还是正常工作的，像之前一样。
+
+### 在容器中配置 Redis
+
+配置容器时，只需要在 `ENTRYPOINT` 配置启动的 `java` 命令时传入 `-Dspring.redis.host=redis` 即可，这里的 `host` 设置成 `redis` ，是因为 `docker-compose` 配置时，我们为 `api-server` 连接的就是 `redis` 。当然如果端口不是默认的 `6379` 的话，还需要传入 `-Dspring.redis.port=xxxx`
+
+```groovy
+// 省略
+task createDockerfile(type: com.bmuschko.gradle.docker.tasks.image.Dockerfile, dependsOn: ['bootJar']) {
+    description = "自动创建 Dockerfile"
+    destFile = project.file('src/main/docker/Dockerfile')
+    from 'openjdk:8-jdk-alpine'
+    volume '/tmp'
+    addFile "${project.name}-${project.version}.jar", "app.jar"
+    instruction { 'ENTRYPOINT [' +
+            '"java", ' +
+            '"-agentlib:jdwp=transport=dt_socket,address=5005,server=y,suspend=n", ' +
+            '"-Dspring.data.mongodb.uri=mongodb://mongo/taskmgr", ' +
+            '"-Dspring.redis.host=redis", ' + // <--- 这里
+            '"-Dspring.profiles.active=prod", ' +
+            '"-Djava.security.egd=file:/dev/./urandom", ' +
+            '"-jar","/app.jar"]'}
+    maintainer 'Peng Wang "wpcfan@gmail.com"'
+}
+// 省略
+```
+
+## Redisson
+
+Redisson 是一个在 Redis 的基础上实现的 Java 驻内存数据网格（ In-Memory Data Grid ）。它底层采用的是 Netty 框架，不仅提供了一系列的分布式的 Java 常用对象，还提供了许多分布式服务。其中包括( BitSet, Set, Multimap, SortedSet, Map, List, Queue, BlockingQueue, Deque, BlockingDeque, Semaphore, Lock, AtomicLong, CountDownLatch, Publish / Subscribe, Bloom filter, Remote service, Spring cache, Executor service, Live Object service, Scheduler service ) Redisson 提供了使用 Redis 的最简单和最便捷的方法。
+
+提供一个 Redisson 的配置，我们需要在 `config` 包下新建 `CacheConfig.java`
+
+```java
+@RequiredArgsConstructor
+@EnableCaching
+@Configuration
+@AutoConfigureAfter(RedisAutoConfiguration.class)
+public class CacheConfig {
+
+    private final RedisProperties redisProperties;
+
+    @Bean(destroyMethod = "shutdown")
+    RedissonClient redissonClient() {
+        Config config = new Config();
+        // sentinel
+        if (redisProperties.getSentinel() != null) {
+            SentinelServersConfig sentinelServersConfig = config.useSentinelServers();
+            sentinelServersConfig.setMasterName(redisProperties.getSentinel().getMaster());
+            val nodes = redisProperties.getSentinel().getNodes();
+            sentinelServersConfig.addSentinelAddress(nodes.toArray(new String[0]));
+            sentinelServersConfig.setDatabase(redisProperties.getDatabase());
+            if (redisProperties.getPassword() != null) {
+                sentinelServersConfig.setPassword(redisProperties.getPassword());
+            }
+        } else { // 单个 Server
+            SingleServerConfig singleServerConfig = config.useSingleServer();
+            String schema = redisProperties.isSsl() ? "rediss://" : "redis://";
+            singleServerConfig.setAddress(schema + redisProperties.getHost() + ":" + redisProperties.getPort());
+            singleServerConfig.setDatabase(redisProperties.getDatabase());
+            if (redisProperties.getPassword() != null) {
+                singleServerConfig.setPassword(redisProperties.getPassword());
+            }
+        }
+        return Redisson.create(config);
+    }
+}
+```
+
+为了避免多处配置同样的信息，我们在这个文件中注入了 Redis 的属性设置类 `RedisProperties` 。根据是否设置了前哨而决定是构造一个分布式的配置还是单机配置。在单机配置中，我们利用 `redisProperties` 取得 redis 的信息，并应用到 Redisson 的配置中。在单机配置中， Redisson 设置的地址的格式是 `协议://地址:端口号` ，和 MongoDB 类似的， <redis://localhost:6379> 就是采用非 `SSL` 协议连接本机的 `6379` 端口，而 <rediss://redis:6479> 就是以 `SSL` 协议连接主机 `redis` 的 `6479` 端口。

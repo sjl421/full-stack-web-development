@@ -6,12 +6,12 @@
 
 NoSQL 是 **Not Only SQL** 的缩写，而不是许多人印象中的 No SQL，其实更正式的名字应该称作非关系型数据库。关系型数据库大家都很熟知了，比如 MySQL, Oracle, SQL Server 等，而 NoSQL 数据库泛指不能划归到关系型数据库中的其他数据库。这个类别可是很广泛的，也就是说即使都是 NoSQL 数据库，差异还是很大的。下表列出了一些典型的 NoSQL 数据库和它们的分类，当然类型的划分只是一个大概的参考，它们之间没有绝对的分界，也有交差的情况。
 
-类型 | 典型数据库 | 特点
----------|----------|---------
- 列存储 | Hbase、Cassandra | 按列存储数据，特点是方便存储结构化和半结构化数据，方便做数据压缩，对针对某一列或者某几列的查询有非常大的 I/O 优势。
- 文档存储 | MongoDB、CouchDB | 用类似 `json` 的格式存储，存储的内容是文档型的。这样也就有有机会对某些字段建立索引，实现关系数据库的某些功能。
- 键值存储 | MemcacheDB、Redis | 键值对形式，通过`key` 快速查询到其 `value`。
- 图存储 | Neo4J | 图形关系的最佳存储。
+| 类型      | 典型数据库         | 特点                                                                                                                |
+| --------- | ------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| 列存储    | Hbase、Cassandra   | 按列存储数据，特点是方便存储结构化和半结构化数据，方便做数据压缩，对针对某一列或者某几列的查询有非常大的 I/O 优势。 |
+| 文档存储  | MongoDB、CouchDB   | 用类似 `json` 的格式存储，存储的内容是文档型的。这样也就有有机会对某些字段建立索引，实现关系数据库的某些功能。      |
+| 键值存储  | MemcacheDB、Redis | 键值对形式，通过`key` 快速查询到其 `value`。                                                                        |
+| 图存储    | Neo4J              | 图形关系的最佳存储。                                                                                                |
 
 ### 为什么要使用 NoSQL？
 
@@ -508,6 +508,18 @@ dependencies {
     implementation("org.springframework.data:spring-data-rest-hal-browser")
 }
 ```
+
+然后在 IDEA 中选择 `Preference->Compiler` 中的 `Build Project automatically` 。
+
+![选择 Complier 的自动编译项目](/assets/2018-05-09-18-57-46.png)
+
+但默认情况下 IDEA 对于运行中的项目不会自动编译，我们需要 Hack 一下。一起按住 `cmd` + `shift` + `A` （ windows 中使用 `ctrl` + `shift` + `A` ） 选择 `Registry`
+
+![找到 IDEA 的注册表](/assets/2018-05-09-19-03-15.png)
+
+然后找到 `complier.automake.allow.when.app.running` 这一项，选中后面的复选框。
+
+![在注册表中勾选](/assets/2018-05-09-19-04-51.png)
 
 在 IDEA 中，右键选择 Application，然后选择 `Run Application` 就可以了，现在你尝试更新一些文件，在 console 中就可以看到服务自动重启了。
 

@@ -39,7 +39,7 @@
   * [7.4 WebSocket 实时通讯](chapter_7/chap_7_4.md)
   * [7.5 自动化测试](chapter_7/chap_7_5.md)
 * [第八章 前端工程化](chapter_8/README.md)
-  * [8.1 使用 Redux 管理](chapter_8/chap_8_1.md)
+  * [8.1 使用 Redux 管理状态](chapter_8/chap_8_1.md)
   * [8.2 使用 Effect 管理副作用](chapter_8/chap_8_2.md)
   * [8.3 服务端渲染](chapter_8/chap_8_3.md)
   * [8.4 自动化测试](chapter_8/chap_8_4.md)

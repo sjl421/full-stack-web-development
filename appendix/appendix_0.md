@@ -136,3 +136,8 @@ screen
 screen -r
 ```
 
+## 在云环境部署 Elasticsearch 的容器时发生 `max virtual memory areas vm.max_map_count [65530] likely too low, increase to at least [262144]` 错误
+
+```bash
+sudo sysctl -w vm.max_map_count=262144
+```
