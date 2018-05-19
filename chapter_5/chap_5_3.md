@@ -506,11 +506,11 @@ public class AppProperties {
 
 对 Spring 熟悉的同学可能还知道另一种属性配置的方式，就是 `@Value` 注解了，这两种方式的区别可以看下表。
 
-特性 | `@ConfigurationProperties` | `@Value`
----|---|---
-宽松绑定 | 是 | 否
-元数据支持 | 是 | 否
-SpEL 表达式支持 | 否 | 是
+| 特性             | `@ConfigurationProperties` | `@Value` |
+| ---------------- | -------------------------- | -------- |
+| 宽松绑定         | 是                         | 否       |
+| 元数据支持       | 是                         | 否       |
+| SpEL 表达式支持 | 否                         | 是       |
 
 其中宽松绑定是我翻译的名字，英文是 Relaxed Binding <https://docs.spring.io/spring-boot/docs/current/reference/html/boot-features-external-config.html#boot-features-external-config-relaxed-binding> ，其实就是不严格要求属性的名称和定义的严格一致，比如 `context-path` 可以绑定到 `contextPath` ，`port` 可以绑定到 `PORT` 等，而 `@Value` 是不支持这个宽松绑定的，因此在环境设置的时候，推荐使用 `@ConfigurationProperties` 。此外 `@Value` 也不支持 IDE 的智能提示，因为没有元数据支持。但在有表达式需求时使用 `@Value` 。
 
