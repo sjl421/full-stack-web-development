@@ -36,7 +36,7 @@
   * [7.1 缓存处理](chapter_7/chap_7_1.md)
   * [7.2 Redis 作为缓存框架](chapter_7/chap_7_2.md)
   * [7.3 Elastic Search 提升搜索性能](chapter_7/chap_7_3.md)
-  * [7.4 WebSocket 实时通讯](chapter_7/chap_7_4.md)
+  * [7.4 Spring Boot Actuator 和数据审计](chapter_7/chap_7_4.md)
   * [7.5 自动化测试](chapter_7/chap_7_5.md)
 * [第八章 前端工程化](chapter_8/README.md)
   * [8.1 使用 Redux 管理状态](chapter_8/chap_8_1.md)

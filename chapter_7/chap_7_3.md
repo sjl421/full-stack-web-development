@@ -158,6 +158,10 @@ volumes:
   esdata: {}
 ```
 
+我们这里可以简单的使用 `docker-compose up -d elasticsearch` 启动 Elasticsearch 服务，如果打开浏览器访问 <http://localhost:9200> 的话，可以看到类似如下的 `json` 输出，那就是说明 Elasticsearch 启动正常。 `9200` 是 Elasticsearch 的监控端口，而 `9300` 是客户端连接 Elasticsearch 服务的端口，这两个不要混淆了，在 Spring Boot 中的 `application.yml` 配置时一定要使用 `9300` 端口。
+
+![Elasticsearch 的监控端口返回结果](/assets/2018-05-20-00-26-01.png)
+
 那么有了这些基础配置之后，我们可以利用 Elasticsearch 做什么呢？当然是利用它的强项 -- 基于索引的强大数据查询能力。
 
 ## 构建用户查询 API
@@ -290,7 +294,7 @@ public class AuthServiceImpl implements AuthService {
 }
 ```
 
-同样的，在 `UserServiceImpl` 中，我们需要对 `createUser` 和 `updateUser` 中保存 `UserSearch` ，在 `deleteUser` 中删除 `UserSearch` ，此外需要添加一个搜索方法 `search` 。
+同样的，在 `UserServiceImpl` 中，我们需要对增加用户 `createUser` 和更改用户信息 `updateUser` 中保存 `UserSearch` ，而在删除用户 `deleteUser` 中之后也需要删除 `UserSearch` ，此外需要添加一个搜索方法 `search` ，这里我们采用了 Spring Data Elasticsearch 提供的 `queryStringQuery` 方法对传入的字符串转换成 Elasticsearch 的查询语句。
 
 ```java
 public class UserServiceImpl implements UserService {
@@ -340,3 +344,21 @@ public class UserServiceImpl implements UserService {
     // 省略
 }
 ```
+
+接下来，就是改造一下 `UserResource` ，我们把搜索类的路径统一放在 `/api/_search/` 下面，把查询的字符串作为路径变量。
+
+```java
+@RequiredArgsConstructor
+@RequestMapping("/api")
+@RestController
+public class UserResource {
+    private final UserService userService;
+
+    @GetMapping("/_search/users/{query}")
+    public Page<UserSearch> search(@PathVariable String query, final Pageable pageable) {
+        return userService.search(query, pageable);
+    }
+}
+```
+
+启动应用后，我们可以看到
