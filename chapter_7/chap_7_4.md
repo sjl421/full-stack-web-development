@@ -212,7 +212,14 @@ public class SpringSecurityAuditorAware implements AuditorAware<String> {
 }
 ```
 
-当然如果要实现比较简单的审计功能，这样就可以了，在实体保存到数据库时，Spring Boot 会自动设置创建/最近修改时间以及创建人和修改人。
+当然如果要实现比较简单的审计功能，这样就可以了，在实体保存到数据库时，Spring Boot 会自动设置创建/最近修改时间以及创建人和修改人。当然，我们为了让 Spring Boot 激活审计功能，还需要在 `DatabaseConfig` 中增加一个注解 `@EnableMongoAuditing`
+
+```java
+@EnableMongoAuditing(auditorAwareRef = "springSecurityAuditorAware")
+public class DatabaseConfig {
+  // 省略
+}
+```
 
 但是如果是比较复杂的审计功能，比如要进行对象的版本比较等的话，自己要实现的话就比较复杂了。好在有人已经为这种需求提供了强大的解决方案，而且和 Spring Boot 的配合及其良好。下面，我们就有请 `JaVers` 闪亮登场。
 
@@ -267,3 +274,127 @@ public interface TaskRepository extends MongoRepository<Task, String> {
 ```
 
 JaVers 会在 MongoDB 中创建一个叫 `jv_snapshots` 的 collection ，所有的数据变化都会存储在这个 collection 中。
+
+我们现在需要建立一个 Service ，用于获得审计对象的变化历史列表以及之前一个版本的变更。需要注意的是我们需要一个带完整包名的类名称，以便得到待审计对象的类型（ `Class.forName` ），然后通过 JaVers 提供的 `QueryBuilder` 构造对应的查询。
+
+```java
+package dev.local.gtm.api.service;
+
+import org.javers.core.Javers;
+import org.javers.repository.jql.QueryBuilder;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.annotation.Secured;
+import org.springframework.stereotype.Service;
+
+import dev.local.gtm.api.domain.EntityAuditEvent;
+import dev.local.gtm.api.security.AuthoritiesConstants;
+
+import java.util.Optional;
+import java.util.stream.Collectors;
+
+import lombok.RequiredArgsConstructor;
+import lombok.val;
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
+@RequiredArgsConstructor
+@Service
+public class AuditEventService {
+
+  private static final String basePackageName = "dev.local.gtm.api.domain.";
+  private final Javers javers;
+
+  @Secured(AuthoritiesConstants.ADMIN)
+  public Page<EntityAuditEvent> getChanges(String entityType, Pageable pageable) throws ClassNotFoundException {
+    log.debug("获得一页指定实体对象类型的审计事件");
+    val entityTypeToFetch = Class.forName(basePackageName + entityType);
+    val jqlQuery = QueryBuilder.byClass(entityTypeToFetch)
+      .limit(pageable.getPageSize())
+      .skip(pageable.getPageNumber() * pageable.getPageSize())
+      .withNewObjectChanges(true);
+
+    val auditEvents = javers.findSnapshots(jqlQuery.build()).stream()
+      .map(snapshot -> {
+        EntityAuditEvent event = EntityAuditEvent.fromJaversSnapshot(snapshot);
+        event.setEntityType(entityType);
+        return event;
+      })
+      .collect(Collectors.toList());
+
+    return new PageImpl<EntityAuditEvent>(auditEvents);
+  }
+
+  @Secured(AuthoritiesConstants.ADMIN)
+  public EntityAuditEvent getPrevVersion(String entityType, String entityId, Long commitVersion)
+      throws ClassNotFoundException {
+    val entityTypeToFetch = Class.forName(basePackageName + entityType);
+
+    val jqlQuery = QueryBuilder.byInstanceId(entityId, entityTypeToFetch)
+      .limit(1)
+      .withVersion(commitVersion - 1)
+      .withNewObjectChanges(true);
+
+    return EntityAuditEvent.fromJaversSnapshot(javers.findSnapshots(jqlQuery.build())
+      .get(0));
+  }
+}
+```
+
+有了 Service 之后，对应的 Controller 就非常简单了，简单的调用上面建好的 `AuditEventService` 即可。
+
+```java
+package dev.local.gtm.api.web.rest;
+
+import org.elasticsearch.ResourceNotFoundException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.annotation.Secured;
+import org.springframework.web.bind.annotation.*;
+
+import dev.local.gtm.api.domain.EntityAuditEvent;
+import dev.local.gtm.api.security.AuthoritiesConstants;
+import dev.local.gtm.api.service.AuditEventService;
+import lombok.RequiredArgsConstructor;
+
+import java.util.Arrays;
+import java.util.List;
+
+@RequiredArgsConstructor
+@RestController
+@RequestMapping("/api")
+public class AuditResource {
+
+  private final AuditEventService auditEventService;
+
+  @GetMapping("/management/audits/entities")
+  @Secured(AuthoritiesConstants.ADMIN)
+  public List<String> getAuditedEntities() {
+    return Arrays.asList("User", "Authority", "Task");
+  }
+
+  @GetMapping("/management/audits/changes")
+  public Page<EntityAuditEvent> getChanges(@RequestParam("entityType") String entityType, Pageable pageable) {
+    try {
+      return auditEventService.getChanges(entityType, pageable);
+    } catch(ClassNotFoundException e) {
+      throw new ResourceNotFoundException("指定的类型没有找到");
+    }
+  }
+
+  @GetMapping("/management/audits/previous")
+  public EntityAuditEvent getPreviousVersion(
+    @RequestParam String entityType,
+    @RequestParam String entityId,
+    @RequestParam Long commitVersion) {
+    try {
+      return auditEventService.getPrevVersion(entityType, entityId, commitVersion);
+    } catch (ClassNotFoundException e) {
+      throw new ResourceNotFoundException("指定的类型没有找到");
+    }
+  }
+}
+```
+
+那么我们可以测试一下效果

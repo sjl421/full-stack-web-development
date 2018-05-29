@@ -116,7 +116,7 @@ ZSH_THEME="spaceship"
 * `Angular 5 Snippets` - Angular 开发的必备工具，太多好用的代码模版了。
 * `Angular Language Service` - 为 Angular 提供代码自动完成、AOT 诊断信息、跳转到定义等实用功能。
 * `Debugger for Chrome` - 调试利器、设置断点、查看变量值等等。
-* `Java Extension Pack` - Java 开发插件集合，包括 `Language Support for Java(TM) by Red Hat`, `Debugger for Java`, `Java Test Runner` 和 `Maven Project Explorer` 四款插件，一般来说如果使用  `maven` 或 `gradle` 作为管理脚本的 `Spring` 相关的 web 开发来说还是不错的。当然 Java 方面对比 `IDEA` 还是有很大差距，因为 `vsc` 定位的时轻量级编辑器而不是完整的 IDE 。
+* `Java Extension Pack` - Java 开发插件集合，包括 `Language Support for Java(TM) by Red Hat`, `Debugger for Java`, `Java Test Runner` 和 `Maven Project Explorer` 四款插件，一般来说如果使用  `maven` 或 `gradle` 作为管理脚本的 `Spring` 相关的 web 开发来说还是不错的。当然 VS Code 在 Java 方面的支持对比 `IDEA` 还是有较大差距，因为 `vsc` 定位的时轻量级编辑器而不是完整的 IDE 。
 
 ### Intellij IDEA
 
@@ -129,3 +129,60 @@ ZSH_THEME="spaceship"
 ![Fira Code 字体效果](/assets/2018-03-02-21-34-10.png)
 
 如果有兴趣的同学可以去 ![https://github.com/tonsky/FiraCode](https://github.com/tonsky/FiraCode) 下载
+
+如果需要在 VS Code 中设置使用该字体的话，需要到 `首选项` -> `设置` 中添加如下配置
+
+```json
+{
+    "editor.fontSize": 16,
+    "editor.lineHeight": 24,
+    "editor.fontLigatures": true,
+    "editor.fontFamily": "Fira Code, 'Operator Mono', Menlo, Monaco, 'Courier New', monospace",
+    "terminal.integrated.fontSize": 18,
+    "terminal.integrated.fontFamily": "Fira Code, 'Operator Mono', Menlo, Monaco, 'Courier New', monospace"
+}
+```
+
+请记得要设置 `"editor.fontLigatures": true,` 这样，我们可以看到这个字体给我们带来一些非常有趣的体验，比如 `javascript` 中常见的 `===` 变成了全等号，而 `=>` 更像一个真正的箭头了。
+
+![有趣的 Fira Code 字体](/assets/2018-05-29-23-08-44.png)
+
+## 定义通用的代码格式
+
+在大团队中，我们经常会遇到几个小组因为使用不同的 IDE 导致代码的格式显示的各式各样。也会因此造成在不同 IDE 中进行格式化代码的时候，造成不必要的 diff 。所以统一定义一个不依赖于 IDE 的格式文件对于大工程和大团队来说是很有必要的。这里推荐 EditorConfig <http://editorconfig.org/> ，一个被广泛支持的在众多 IDE 和编辑器保持统一代码风格的开源项目。
+
+EditorConfig 的配置非常简单，只需要建立一个 `.editorconfig` 文件，这个文件的格式很像 `ini` 文件。
+
+```ini
+root = true
+
+[*]
+end_of_line = lf
+insert_final_newline = true
+charset = utf-8
+
+[*.md]
+max_line_length = off
+trim_trailing_whitespace = false
+
+[*.java]
+indent_style = space
+indent_size = 4
+trim_trailing_whitespace = true
+
+[*.yml]
+indent_style = space
+indent_size = 2
+```
+
+上面这个 EditorConfig 就是定义了一个“根”配置，是的，你可以在一个大工程的各个子项目或者子目录使用各自的 EditorConfig 配置，但如果设置 `root = true` 那么就代表这个文件是根配置，应该放在项目的根目录。
+
+对于不同文件后缀，我们可以单独为其定义格式，只需要在 `[]` 中指定后缀名，然后为其设置对应的格式定义即可。常用的配置项如下：
+
+* `end_of_line` -- 指定换行符，可以是 LF 或者 CRLF，但这里使用小写。
+* `insert_final_newline` -- 是否在文件末尾添加一个空行
+* `charset` -- 文件编码格式
+* `max_line_length` -- 每行最大字符数
+* `trim_trailing_whitespace` -- 是否删掉多余的空格
+* `indent_style` -- 缩进风格，是 tab 还是 space
+* `indent_size` -- 缩进大小

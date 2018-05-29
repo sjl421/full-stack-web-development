@@ -153,3 +153,7 @@ ssh -D 8080 -C -N username@example.com
 ```
 
 然后可以设置浏览器使用 SOCKS 代理 `127.0.0.1:8080` ，这样就可以打开本机的浏览器进行访问了。
+
+## vscode 中打开 java 工程显示 classpath not complete
+
+在 macos 中到 `~/Library/Application Support/code/User/workspaceStorage` 中删除对应的文件夹，然后重启 vscode，打开工程回强制重新编译。
