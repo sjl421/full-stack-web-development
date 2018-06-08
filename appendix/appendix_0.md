@@ -40,6 +40,19 @@ chmod 400 </path/to/private_key>
 curl -sSL https://get.docker.com/ | sh
 ```
 
+当然还有国内的镜像可用，但能用多长时间我不敢保证，我个人使用的是 <http://get.daocloud.io/> 提供的 docker 安装镜像
+
+```bash
+curl -sSL https://get.daocloud.io/docker | sh
+```
+
+我们也可以通过这个网站安装 docker-compose
+
+```bash
+curl -L https://get.daocloud.io/docker/compose/releases/download/1.21.2/docker-compose-`uname -s`-`uname -m` > /usr/local/bin/docker-compose
+chmod +x /usr/local/bin/docker-compose
+```
+
 ## 如何不用 sudo 使用 docker ？
 
 ```bash
